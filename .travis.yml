@@ -1,4 +1,7 @@
 language: cpp
+language: perl
+perl:
+  - 5.14
 compiler:
   - gcc
 before_install:
