@@ -14,14 +14,9 @@ po::variables_map process_cmd_line(const int argc, char** argv) {
     ("help", "produce help message")
     ("json_config,j", po::value<std::string>()->
       default_value("client.json"), "JSON file with config information for hosted RL loop")
-    ("threads,t", po::value<size_t>()->default_value(1), "Number of threads")
-    ("examples,n", po::value<size_t>()->default_value(10), "Number of examples per thread")
-	  ("features,x", po::value<size_t>()->default_value(10), "Features count")
-    ("actions,a", po::value<size_t>()->default_value(2), "Number of actions")
-    ("experiment_name,e", po::value<std::string>()->required(), "experiment name")
-    ("perf,p", "if it is perf test (otherwise - validity)")
-    ("float_outcome,f", "if outcome is float (otherwise - json)")
-    ("sleep,s", po::value<size_t>()->default_value(0), "Milliseconds to sleep between loop iterations")
+    ("message_size,s", po::value<size_t>()->default_value(100), "Message size in Kb")
+    ("message_count,n", po::value<size_t>()->default_value(1000000), "Amount of messages")
+    ("threads,t", po::value<size_t>()->default_value(1))
     ;
 
   po::variables_map vm;
@@ -43,8 +38,9 @@ int main(int argc, char** argv) {
       std::cerr << "Test loop haven't initialized properly." << std::endl;
       return -1;
     }
-
-    loop.run();
+    for (int i = 0; i < 5; ++i) {
+      loop.run();
+    }
   }
   catch (const std::exception& e) {
     std::cout << "Error: " << e.what() << std::endl;
