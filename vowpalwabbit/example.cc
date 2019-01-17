@@ -4,6 +4,8 @@ individual contributors. All rights reserved.  Released under a BSD (revised)
 license as described in the file LICENSE.
  */
 #include <stdint.h>
+#include <algorithm>
+
 #include "gd.h"
 
 float collision_cleanup(features& fs)
@@ -43,7 +45,7 @@ void copy_example_label(example* dst, example* src, size_t, void(*copy_label)(vo
     dst->l = src->l;
 }
 
-void copy_example_metadata(bool audit, example* dst, example* src)
+void copy_example_metadata(bool /* audit */, example* dst, example* src)
 {
   copy_array(dst->tag, src->tag);
   dst->example_counter = src->example_counter;
@@ -231,6 +233,7 @@ void dealloc_example(void(*delete_label)(void*), example&ec, void(*delete_predic
 }
 
 void finish_example(vw&, example&);
+void clean_example(vw&, example&, bool rewind);
 
 void clear_seq_and_finish_examples(vw& all, multi_ex& ec_seq)
 {
@@ -241,4 +244,11 @@ void clear_seq_and_finish_examples(vw& all, multi_ex& ec_seq)
   ec_seq.clear();
 }
 
+void return_multiple_example(vw& all, v_array<example*>& examples)
+{
+  for (auto ec : examples) {
+    clean_example(all, *ec, true);
+  }
+  examples.clear();
+}
 }
