@@ -155,6 +155,7 @@
   <ItemGroup>
     <ClInclude Include="active_cover.h" />
     <ClInclude Include="action_score.h" />
+    <ClInclude Include="object_pool.h" />
     <ClInclude Include="options_serializer_boost_po.h" />
     <ClInclude Include="array_parameters.h" />
     <ClInclude Include="autolink.h" />
@@ -171,6 +172,7 @@
     <ClInclude Include="gen_cs_example.h" />
     <ClInclude Include="cb_adf.h" />
     <ClInclude Include="cbify.h" />
+    <ClInclude Include="warm_cb.h" />
     <ClInclude Include="comp_io.h" />
     <ClInclude Include="confidence.h" />
     <ClInclude Include="constant.h" />
@@ -201,6 +203,7 @@
     <ClInclude Include="options_boost_po.h" />
     <ClInclude Include="options_types.h" />
     <ClInclude Include="parse_example_json.h" />
+    <ClInclude Include="queue.h" />
     <ClInclude Include="recall_tree.h" />
     <ClInclude Include="global_data.h" />
     <ClInclude Include="interact.h" />
@@ -269,6 +272,7 @@
     <ClCompile Include="cache.cc" />
     <ClCompile Include="cb.cc" />
     <ClCompile Include="cbify.cc" />
+    <ClCompile Include="warm_cb.cc" />
     <ClCompile Include="cb_explore.cc" />
     <ClCompile Include="cb_explore_adf.cc" />
     <ClCompile Include="gen_cs_example.cc" />

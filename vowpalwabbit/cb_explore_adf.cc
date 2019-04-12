@@ -269,7 +269,9 @@ void predict_or_learn_first(cb_explore_adf& data, multi_learner& base, multi_ex&
 template <bool is_learn>
 void predict_or_learn_greedy(cb_explore_adf& data, multi_learner& base, multi_ex& examples)
 {
-  // Explore uniform random an epsilon fraction of the time.
+	data.offset = examples[0]->ft_offset;
+  //Explore uniform random an epsilon fraction of the time.
+
   if (is_learn && test_adf_sequence(examples) != nullptr)
     multiline_learn_or_predict<true>(base, examples, data.offset);
   else
@@ -640,6 +642,12 @@ void finish_multiline_example(vw& all, cb_explore_adf& data, multi_ex& ec_seq)
     output_example_seq(all, data, ec_seq);
     CB_ADF::global_print_newline(all);
   }
+
+  for (auto x : ec_seq)
+  {
+    x->l.cb.costs.clear();
+  }
+
   VW::clear_seq_and_finish_examples(all, ec_seq);
 }
 
@@ -807,13 +815,6 @@ base_learner* cb_explore_adf_setup(options_i& options, vw& all)
     data->explore_type = EPS_GREEDY;
   }
 
-  multi_learner* base = as_multiline(setup_base(options, all));
-  all.p->lp = CB::cb_label;
-  all.label_type = label_type::cb;
-
-  // Extract from lower level reductions.
-  data->gen_cs.scorer = all.scorer;
-  data->cs_ldf_learner = as_multiline(all.cost_sensitive);
   data->gen_cs.cb_type = CB_TYPE_IPS;
   if (options.was_supplied("cb_type"))
   {
@@ -829,11 +830,22 @@ base_learner* cb_explore_adf_setup(options_i& options, vw& all)
       data->gen_cs.cb_type = CB_TYPE_MTR;
     }
     else
+    {
       all.trace_message << "warning: cb_type must be in {'ips','dr','mtr'}; resetting to ips." << std::endl;
+      options.replace("cb_type", "ips");
+    }
 
     if (data->explore_type == REGCB && data->gen_cs.cb_type != CB_TYPE_MTR)
       all.trace_message << "warning: bad cb_type, RegCB only supports mtr!" << std::endl;
   }
+
+  multi_learner* base = as_multiline(setup_base(options, all));
+  all.p->lp = CB::cb_label;
+  all.label_type = label_type::cb;
+
+  // Extract from lower level reductions.
+  data->gen_cs.scorer = all.scorer;
+  data->cs_ldf_learner = as_multiline(all.cost_sensitive);
 
   learner<cb_explore_adf, multi_ex>& l = init_learner(data, base, CB_EXPLORE_ADF::do_actual_learning<true>,
       CB_EXPLORE_ADF::do_actual_learning<false>, problem_multiplier, prediction_type::action_probs);
