@@ -70,6 +70,13 @@ struct baseline
   bool global_only;  // only use a global constant for the baseline
   bool global_initialized;
   bool check_enabled;  // only use baseline when the example contains enabled flag
+
+  ~baseline()
+  {
+    if (ec)
+      VW::dealloc_example(simple_label.delete_label, *ec);
+    free(ec);
+  }
 };
 
 void init_global(baseline& data)
@@ -184,12 +191,6 @@ float sensitivity(baseline& data, base_learner& base, example& ec)
   return baseline_sens + sens;
 }
 
-void finish(baseline& data)
-{
-  VW::dealloc_example(simple_label.delete_label, *data.ec);
-  free(data.ec);
-}
-
 base_learner* baseline_setup(options_i& options, vw& all)
 {
   auto data = scoped_calloc_or_throw<baseline>();
@@ -215,6 +216,8 @@ base_learner* baseline_setup(options_i& options, vw& all)
 
   // initialize baseline example
   data->ec = VW::alloc_examples(simple_label.label_size, 1);
+  data->ec->interactions = &all.interactions;
+
   data->ec->in_use = true;
   data->all = &all;
 
@@ -227,7 +230,6 @@ base_learner* baseline_setup(options_i& options, vw& all)
   learner<baseline, example>& l = init_learner(data, base, predict_or_learn<true>, predict_or_learn<false>);
 
   l.set_sensitivity(sensitivity);
-  l.set_finish(finish);
 
   return make_base(l);
 }

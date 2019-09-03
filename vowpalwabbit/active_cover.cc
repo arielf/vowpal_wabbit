@@ -1,3 +1,4 @@
+#include <cmath>
 #include <errno.h>
 #include "reductions.h"
 #include "rand48.h"
@@ -29,6 +30,12 @@ struct active_cover
 
   vw* all;  // statistics, loss
   LEARNER::base_learner* l;
+
+  ~active_cover()
+  {
+    delete[] lambda_n;
+    delete[] lambda_d;
+  }
 };
 
 bool dis_test(vw& all, example& ec, single_learner& base, float /* prediction */, float threshold)
@@ -104,7 +111,7 @@ float query_decision(active_cover& a, single_learner& l, example& ec, float pred
 
   p = sqrt(q2) / (1 + sqrt(q2));
 
-  if (nanpattern(p))
+  if (std::isnan(p))
   {
     p = 1.f;
   }
@@ -218,12 +225,6 @@ void predict_or_learn_active_cover(active_cover& a, single_learner& base, exampl
   }
 }
 
-void finish(active_cover& ac)
-{
-  delete[] ac.lambda_n;
-  delete[] ac.lambda_d;
-}
-
 base_learner* active_cover_setup(options_i& options, vw& all)
 {
   auto data = scoped_calloc_or_throw<active_cover>();
@@ -273,7 +274,6 @@ base_learner* active_cover_setup(options_i& options, vw& all)
   // Create new learner
   learner<active_cover, example>& l = init_learner(
       data, base, predict_or_learn_active_cover<true>, predict_or_learn_active_cover<false>, data->cover_size + 1);
-  l.set_finish(finish);
 
   return make_base(l);
 }

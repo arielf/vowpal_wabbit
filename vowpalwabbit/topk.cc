@@ -17,7 +17,7 @@ using scored_example = pair<float, v_array<char>>;
 
 struct compare_scored_examples
 {
-  bool operator()(scored_example const& a, scored_example const& b) const { return a.first > b.first; }
+  constexpr bool operator()(scored_example const& a, scored_example const& b) const { return a.first > b.first; }
 };
 
 struct topk
@@ -31,19 +31,15 @@ void print_result(int f, priority_queue<scored_example, vector<scored_example>, 
 {
   if (f >= 0)
   {
-    char temp[30];
     std::stringstream ss;
     scored_example tmp_example;
     while (!pr_queue.empty())
     {
       tmp_example = pr_queue.top();
       pr_queue.pop();
-      sprintf(temp, "%f", tmp_example.first);
-      ss << temp;
-      ss << ' ';
+      ss << std::fixed << tmp_example.first << " ";
       print_tag(ss, tmp_example.second);
-      ss << ' ';
-      ss << '\n';
+      ss << " \n";
     }
     ss << '\n';
     ssize_t len = ss.str().size();
@@ -96,7 +92,7 @@ void finish_example(vw& all, topk& d, multi_ex& ec_seq)
 {
   for (int sink : all.final_prediction_sink) print_result(sink, d.pr_queue);
 
-  VW::clear_seq_and_finish_examples(all, ec_seq);
+  VW::finish_example(all, ec_seq);
 }
 
 void finish(topk& d) { d.pr_queue = priority_queue<scored_example, vector<scored_example>, compare_scored_examples>(); }

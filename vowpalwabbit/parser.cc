@@ -22,7 +22,7 @@ license as described in the file LICENSE.
 #include <io.h>
 typedef int socklen_t;
 
-int daemon(int a, int b)
+int daemon(int /*a*/, int /*b*/)
 {
   exit(0);
   return 0;
@@ -89,39 +89,29 @@ void set_compressed(parser* par)
 
 uint32_t cache_numbits(io_buf* buf, int filepointer)
 {
-  try
+  size_t v_length;
+  buf->read_file(filepointer, (char*)&v_length, sizeof(v_length));
+  if (v_length > 61)
+    THROW("cache version too long, cache file is probably invalid");
+
+  if (v_length == 0)
+    THROW("cache version too short, cache file is probably invalid");
+
+  std::vector<char> t(v_length);
+  buf->read_file(filepointer, t.data(), v_length);
+  VW::version_struct v_tmp(t.data());
+  if (v_tmp != VW::version)
   {
-    size_t v_length;
-    buf->read_file(filepointer, (char*)&v_length, sizeof(v_length));
-    if (v_length > 61)
-      THROW("cache version too long, cache file is probably invalid");
-
-    if (v_length == 0)
-      THROW("cache version too short, cache file is probably invalid");
-
-    std::vector<char> t(v_length);
-    buf->read_file(filepointer, t.data(), v_length);
-    version_struct v_tmp(t.data());
-    if (v_tmp != version)
-    {
-      //      cout << "cache has possibly incompatible version, rebuilding" << endl;
-      return 0;
-    }
-
-    char temp;
-    if (buf->read_file(filepointer, &temp, 1) < 1)
-      THROW("failed to read");
-
-    if (temp != 'c')
-      THROW("data file is not a cache file");
+    //      cout << "cache has possibly incompatible version, rebuilding" << endl;
+    return 0;
   }
-  catch (...)
-  {
-    // TODO fix this exception bubbling behavior: https://github.com/VowpalWabbit/vowpal_wabbit/issues/1774
-    // Prior to using a std::vector, a v_array was used and the catch statement was used to delete it.
-    // This caused any exception to be ignored. Bubbling up this exception causes tests to fail so
-    // I am going to swallow it to maintain previous behavior.
-  }
+
+  char temp;
+  if (buf->read_file(filepointer, &temp, 1) < 1)
+    THROW("failed to read");
+
+  if (temp != 'c')
+    THROW("data file is not a cache file");
 
   uint32_t cache_numbits;
   if (buf->read_file(filepointer, &cache_numbits, sizeof(cache_numbits)) < (int)sizeof(cache_numbits))
@@ -248,10 +238,10 @@ void make_write_cache(vw& all, string& newname, bool quiet)
     return;
   }
 
-  size_t v_length = (uint64_t)version.to_string().length() + 1;
+  size_t v_length = (uint64_t)VW::version.to_string().length() + 1;
 
   output->write_file(f, &v_length, sizeof(v_length));
-  output->write_file(f, version.to_string().c_str(), v_length);
+  output->write_file(f, VW::version.to_string().c_str(), v_length);
   output->write_file(f, "c", 1);
   output->write_file(f, &all.num_bits, sizeof(all.num_bits));
 
@@ -542,6 +532,7 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
 
       if (input_options.json || input_options.dsjson)
       {
+
         // TODO: change to class with virtual method
         // --invert_hash requires the audit parser version to save the extra information.
         if (all.audit || all.hash_inv)
@@ -549,14 +540,12 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
           all.p->reader = &read_features_json<true>;
           all.p->text_reader = &line_to_examples_json<true>;
           all.p->audit = true;
-          all.p->jsonp = std::make_shared<json_parser<true>>();
         }
         else
         {
           all.p->reader = &read_features_json<false>;
           all.p->text_reader = &line_to_examples_json<false>;
           all.p->audit = false;
-          all.p->jsonp = std::make_shared<json_parser<false>>();
         }
 
         all.p->decision_service_json = input_options.dsjson;
@@ -748,6 +737,9 @@ void setup_example(vw& all, example* ae)
     ae->total_sum_feat_sq += fs.sum_feat_sq;
   }
 
+  // Set the interactions for this example to the global set.
+  ae->interactions = &all.interactions;
+
   size_t new_features_cnt;
   float new_features_sum_feat_sq;
   INTERACTIONS::eval_count_of_generated_ft(all, *ae, new_features_cnt, new_features_sum_feat_sq);
@@ -886,12 +878,6 @@ void clean_example(vw& all, example& ec, bool rewind)
   all.p->example_pool.return_object(&ec);
 }
 
-void finish_example(vw& all, multi_ex& ec_seq)
-{
-  for (auto ec : ec_seq) finish_example(all, *ec);
-  ec_seq.clear();
-}
-
 void finish_example(vw& all, example& ec)
 {
   // only return examples to the pool that are from the pool and not externally allocated
@@ -979,9 +965,7 @@ example* example_initializer::operator()(example* ex)
   return ex;
 }
 
-void adjust_used_index(vw&)
-{ /* no longer used */
-}
+void adjust_used_index(vw&) { /* no longer used */ }
 
 namespace VW
 {

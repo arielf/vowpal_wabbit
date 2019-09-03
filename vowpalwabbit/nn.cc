@@ -17,9 +17,9 @@ using namespace std;
 using namespace LEARNER;
 using namespace VW::config;
 
-const float hidden_min_activation = -3;
-const float hidden_max_activation = 3;
-const uint64_t nn_constant = 533357803;
+constexpr float hidden_min_activation = -3;
+constexpr float hidden_max_activation = 3;
+constexpr uint64_t nn_constant = 533357803;
 
 struct nn
 {
@@ -44,6 +44,18 @@ struct nn
   polyprediction* hiddenbias_pred;
 
   vw* all;  // many things
+
+  ~nn()
+  {
+    delete squared_loss;
+    free(hidden_units);
+    free(dropped_out);
+    free(hidden_units_pred);
+    free(hiddenbias_pred);
+    VW::dealloc_example(nullptr, output_layer);
+    VW::dealloc_example(nullptr, hiddenbias);
+    VW::dealloc_example(nullptr, outputweight);
+  }
 };
 
 #define cast_uint32_t static_cast<uint32_t>
@@ -71,6 +83,7 @@ void finish_setup(nn& n, vw& all)
   // TODO: output_layer audit
 
   memset(&n.output_layer, 0, sizeof(n.output_layer));
+  n.output_layer.interactions = &all.interactions;
   n.output_layer.indices.push_back(nn_output_namespace);
   uint64_t nn_index = nn_constant << all.weights.stride_shift();
 
@@ -100,6 +113,7 @@ void finish_setup(nn& n, vw& all)
 
   // TODO: not correct if --noconstant
   memset(&n.hiddenbias, 0, sizeof(n.hiddenbias));
+  n.hiddenbias.interactions = &all.interactions;
   n.hiddenbias.indices.push_back(constant_namespace);
   n.hiddenbias.feature_space[constant_namespace].push_back(1, (uint64_t)constant);
   if (all.audit || all.hash_inv)
@@ -111,6 +125,7 @@ void finish_setup(nn& n, vw& all)
   n.hiddenbias.in_use = true;
 
   memset(&n.outputweight, 0, sizeof(n.outputweight));
+  n.outputweight.interactions = &all.interactions;
   n.outputweight.indices.push_back(nn_output_namespace);
   features& outfs = n.output_layer.feature_space[nn_output_namespace];
   n.outputweight.feature_space[nn_output_namespace].push_back(outfs.values[0], outfs.indicies[0]);
@@ -397,18 +412,6 @@ void finish_example(vw& all, nn&, example& ec)
   all.raw_prediction = save_raw_prediction;
 }
 
-void finish(nn& n)
-{
-  delete n.squared_loss;
-  free(n.hidden_units);
-  free(n.dropped_out);
-  free(n.hidden_units_pred);
-  free(n.hiddenbias_pred);
-  VW::dealloc_example(nullptr, n.output_layer);
-  VW::dealloc_example(nullptr, n.hiddenbias);
-  VW::dealloc_example(nullptr, n.outputweight);
-}
-
 base_learner* nn_setup(options_i& options, vw& all)
 {
   auto n = scoped_calloc_or_throw<nn>();
@@ -463,7 +466,6 @@ base_learner* nn_setup(options_i& options, vw& all)
       init_learner(n, base, predict_or_learn_multi<true, true>, predict_or_learn_multi<false, true>, n->k + 1);
   if (nv.multitask)
     l.set_multipredict(multipredict);
-  l.set_finish(finish);
   l.set_finish_example(finish_example);
   l.set_end_pass(end_pass);
 

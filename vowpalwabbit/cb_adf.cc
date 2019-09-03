@@ -5,6 +5,7 @@
 */
 #include <float.h>
 #include <errno.h>
+#include <algorithm>
 
 #include "reductions.h"
 #include "v_hashmap.h"
@@ -44,6 +45,22 @@ struct cb_adf
   uint64_t offset;
   bool no_predict;
   bool rank_all;
+  float clip_p;
+
+  ~cb_adf()
+  {
+    cb_labels.delete_v();
+    for (auto& prepped_cs_label : prepped_cs_labels)
+      prepped_cs_label.costs.delete_v();
+    prepped_cs_labels.delete_v();
+    cs_labels.costs.delete_v();
+    backup_weights.delete_v();
+    backup_nf.delete_v();
+    prob_s.delete_v();
+
+    a_s.delete_v();
+    gen_cs.pred_scores.costs.delete_v();
+  }
 };
 
 CB::cb_class get_observed_cost(multi_ex& examples)
@@ -80,7 +97,7 @@ CB::cb_class get_observed_cost(multi_ex& examples)
 
 void learn_IPS(cb_adf& mydata, multi_learner& base, multi_ex& examples)
 {
-  gen_cs_example_ips(examples, mydata.cs_labels);
+  gen_cs_example_ips(examples, mydata.cs_labels, mydata.clip_p);
   call_cs_ldf<true>(base, examples, mydata.cb_labels, mydata.cs_labels, mydata.prepped_cs_labels, mydata.offset);
 }
 
@@ -177,7 +194,7 @@ void learn_SM(cb_adf& mydata, multi_learner& base, multi_ex& examples)
 
 void learn_DR(cb_adf& mydata, multi_learner& base, multi_ex& examples)
 {
-  gen_cs_example_dr<true>(mydata.gen_cs, examples, mydata.cs_labels);
+  gen_cs_example_dr<true>(mydata.gen_cs, examples, mydata.cs_labels, mydata.clip_p);
   call_cs_ldf<true>(base, examples, mydata.cb_labels, mydata.cs_labels, mydata.prepped_cs_labels, mydata.offset);
 }
 
@@ -203,7 +220,8 @@ void learn_MTR(cb_adf& mydata, multi_learner& base, multi_ex& examples)
   gen_cs_example_mtr(mydata.gen_cs, examples, mydata.cs_labels);
   uint32_t nf = (uint32_t)examples[mydata.gen_cs.mtr_example]->num_features;
   float old_weight = examples[mydata.gen_cs.mtr_example]->weight;
-  examples[mydata.gen_cs.mtr_example]->weight *= 1.f / examples[mydata.gen_cs.mtr_example]->l.cb.costs[0].probability *
+  const float clipped_p = (std::max)(examples[mydata.gen_cs.mtr_example]->l.cb.costs[0].probability, mydata.clip_p);
+  examples[mydata.gen_cs.mtr_example]->weight *= 1.f / clipped_p *
       ((float)mydata.gen_cs.event_sum / (float)mydata.gen_cs.action_sum);
 
   // TODO!!! mydata.cb_labels are not getting properly restored (empty costs are dropped)
@@ -214,24 +232,33 @@ void learn_MTR(cb_adf& mydata, multi_learner& base, multi_ex& examples)
   swap(examples[0]->pred.a_s, mydata.a_s);
 }
 
-bool test_adf_sequence(multi_ex& ec_seq)
+// Validates a multiline example collection as a valid sequence for action dependent features format.
+example* test_adf_sequence(multi_ex& ec_seq)
 {
+  if (ec_seq.size() == 0)
+    THROW("cb_adf: At least one action must be provided for an example to be valid.");
+
   uint32_t count = 0;
+  example* ret = nullptr;
   for (size_t k = 0; k < ec_seq.size(); k++)
   {
     example* ec = ec_seq[k];
+
+    // Check if there is more than one cost for this example.
     if (ec->l.cb.costs.size() > 1)
       THROW("cb_adf: badly formatted example, only one cost can be known.");
 
+    // Check whether the cost was initialized to a value.
     if (ec->l.cb.costs.size() == 1 && ec->l.cb.costs[0].cost != FLT_MAX)
+    {
+      ret = ec;
       count += 1;
+      if (count > 1)
+        THROW("cb_adf: badly formatted example, only one line can have a cost");
+    }
   }
-  if (count == 0)
-    return true;
-  else if (count == 1)
-    return false;
-  else
-    THROW("cb_adf: badly formatted example, only one line can have a cost");
+
+  return ret;
 }
 
 template <bool is_learn>
@@ -239,7 +266,7 @@ void do_actual_learning(cb_adf& data, multi_learner& base, multi_ex& ec_seq)
 {
   data.offset = ec_seq[0]->ft_offset;
   data.gen_cs.known_cost = get_observed_cost(ec_seq);  // need to set for test case
-  if (is_learn && !test_adf_sequence(ec_seq))
+  if (is_learn && test_adf_sequence(ec_seq) != nullptr)
   {
     /*	v_array<float> temp_scores;
     temp_scores = v_init<float>();
@@ -309,7 +336,7 @@ bool update_statistics(vw& all, cb_adf& c, example& ec, multi_ex* ec_seq)
 
   bool labeled_example = true;
   if (c.gen_cs.known_cost.probability > 0)
-    loss = get_unbiased_cost(&(c.gen_cs.known_cost), c.gen_cs.pred_scores, action);
+    loss = get_cost_estimate(&(c.gen_cs.known_cost), c.gen_cs.pred_scores, action);
   else
     labeled_example = false;
 
@@ -399,22 +426,7 @@ void finish_multiline_example(vw& all, cb_adf& data, multi_ex& ec_seq)
     output_example_seq(all, data, ec_seq);
     global_print_newline(all);
   }
-  VW::clear_seq_and_finish_examples(all, ec_seq);
-}
-
-void finish(cb_adf& data)
-{
-  data.gen_cs.mtr_ec_seq.~multi_ex();
-  data.cb_labels.delete_v();
-  for (size_t i = 0; i < data.prepped_cs_labels.size(); i++) data.prepped_cs_labels[i].costs.delete_v();
-  data.prepped_cs_labels.delete_v();
-  data.cs_labels.costs.delete_v();
-  data.backup_weights.delete_v();
-  data.backup_nf.delete_v();
-  data.prob_s.delete_v();
-
-  data.a_s.delete_v();
-  data.gen_cs.pred_scores.costs.delete_v();
+  VW::finish_example(all, ec_seq);
 }
 
 void save_load(cb_adf& c, io_buf& model_file, bool read, bool text)
@@ -444,6 +456,7 @@ base_learner* cb_adf_setup(options_i& options, vw& all)
                .help("Do Contextual Bandit learning with multiline action dependent features."))
       .add(make_option("rank_all", ld->rank_all).keep().help("Return actions sorted by score order"))
       .add(make_option("no_predict", ld->no_predict).help("Do not do a prediction when training"))
+      .add(make_option("clip_p", ld->clip_p).keep().default_value(0.f).help("Clipping probability in importance weight. Default: 0.f (no clipping)."))
       .add(make_option("cb_type", type_string)
                .keep()
                .help("contextual bandit method to use in {ips, dm, dr, mtr, sm}. Default: mtr"));
@@ -486,6 +499,9 @@ base_learner* cb_adf_setup(options_i& options, vw& all)
     ld->gen_cs.cb_type = CB_TYPE_MTR;
   }
 
+  if (ld->clip_p > 0.f && ld->gen_cs.cb_type == CB_TYPE_SM)
+    all.trace_message << "warning: clipping probability not yet implemented for cb_type sm; p will not be clipped." << std::endl;
+
   all.delete_prediction = ACTION_SCORE::delete_action_scores;
 
   // Push necessary flags.
@@ -519,7 +535,6 @@ base_learner* cb_adf_setup(options_i& options, vw& all)
 
   bare->gen_cs.scorer = all.scorer;
 
-  l.set_finish(CB_ADF::finish);
   l.set_save_load(CB_ADF::save_load);
   return make_base(l);
 }

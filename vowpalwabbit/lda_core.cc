@@ -88,17 +88,24 @@ struct lda
   double example_t;
   vw *all;  // regressor, lda
 
-  // constexpr is not supported in VS2013 (except in one CTP release)
-  // if it makes it into VS 2015 change the next ifdef to check Visual Studio Release
-
-  // static constexpr float underflow_threshold = 1.0e-10f;
-  inline float underflow_threshold() { return 1.0e-10f; }
-
+  static constexpr float underflow_threshold = 1.0e-10f;
   inline float digamma(float x);
   inline float lgamma(float x);
   inline float powf(float x, float p);
   inline void expdigammify(vw &all, float *gamma);
   inline void expdigammify_2(vw &all, float *gamma, float *norm);
+
+  ~lda()
+  {
+    Elogtheta.delete_v();
+    decay_levels.delete_v();
+    total_new.delete_v();
+    examples.delete_v();
+    total_lambda.delete_v();
+    doc_lengths.delete_v();
+    digammas.delete_v();
+    v.delete_v();
+  }
 };
 
 // #define VW_NO_INLINE_SIMD
@@ -596,13 +603,13 @@ void lda::expdigammify(vw &all, float *gamma)
   switch (mmode)
   {
     case USE_FAST_APPROX:
-      ldamath::expdigammify<float, USE_FAST_APPROX>(all, gamma, underflow_threshold(), 0.0f);
+      ldamath::expdigammify<float, USE_FAST_APPROX>(all, gamma, underflow_threshold, 0.0f);
       break;
     case USE_PRECISE:
-      ldamath::expdigammify<float, USE_PRECISE>(all, gamma, underflow_threshold(), 0.0f);
+      ldamath::expdigammify<float, USE_PRECISE>(all, gamma, underflow_threshold, 0.0f);
       break;
     case USE_SIMD:
-      ldamath::expdigammify<float, USE_SIMD>(all, gamma, underflow_threshold(), 0.0f);
+      ldamath::expdigammify<float, USE_SIMD>(all, gamma, underflow_threshold, 0.0f);
       break;
     default:
       std::cerr << "lda::expdigammify: Trampled or invalid math mode, aborting" << std::endl;
@@ -615,13 +622,13 @@ void lda::expdigammify_2(vw &all, float *gamma, float *norm)
   switch (mmode)
   {
     case USE_FAST_APPROX:
-      ldamath::expdigammify_2<float, USE_FAST_APPROX>(all, gamma, norm, underflow_threshold());
+      ldamath::expdigammify_2<float, USE_FAST_APPROX>(all, gamma, norm, underflow_threshold);
       break;
     case USE_PRECISE:
-      ldamath::expdigammify_2<float, USE_PRECISE>(all, gamma, norm, underflow_threshold());
+      ldamath::expdigammify_2<float, USE_PRECISE>(all, gamma, norm, underflow_threshold);
       break;
     case USE_SIMD:
-      ldamath::expdigammify_2<float, USE_SIMD>(all, gamma, norm, underflow_threshold());
+      ldamath::expdigammify_2<float, USE_SIMD>(all, gamma, norm, underflow_threshold);
       break;
     default:
       std::cerr << "lda::expdigammify_2: Trampled or invalid math mode, aborting" << std::endl;
@@ -1272,19 +1279,6 @@ void end_examples(lda &l)
 
 void finish_example(vw &, lda &, example &) {}
 
-void finish(lda &ld)
-{
-  ld.sorted_features.~vector<index_feature>();
-  ld.Elogtheta.delete_v();
-  ld.decay_levels.delete_v();
-  ld.total_new.delete_v();
-  ld.examples.delete_v();
-  ld.total_lambda.delete_v();
-  ld.doc_lengths.delete_v();
-  ld.digammas.delete_v();
-  ld.v.delete_v();
-}
-
 std::istream &operator>>(std::istream &in, lda_math_mode &mmode)
 {
   using namespace boost::program_options;
@@ -1375,7 +1369,6 @@ LEARNER::base_learner *lda_setup(options_i &options, vw &all)
   l.set_finish_example(finish_example);
   l.set_end_examples(end_examples);
   l.set_end_pass(end_pass);
-  l.set_finish(finish);
 
   return make_base(l);
 }

@@ -80,6 +80,7 @@ void copy_example_data(bool audit, example* dst, example* src)
   // copy_array(dst->atomics[i], src->atomics[i]);
   dst->num_features = src->num_features;
   dst->total_sum_feat_sq = src->total_sum_feat_sq;
+  dst->interactions = src->interactions;
 }
 
 void copy_example_data(bool audit, example* dst, example* src, size_t label_size, void (*copy_label)(void*, void*))
@@ -239,13 +240,12 @@ void dealloc_example(void (*delete_label)(void*), example& ec, void (*delete_pre
 void finish_example(vw&, example&);
 void clean_example(vw&, example&, bool rewind);
 
-void clear_seq_and_finish_examples(vw& all, multi_ex& ec_seq)
+void finish_example(vw& all, multi_ex& ec_seq)
 {
   if (ec_seq.size() > 0)
     for (example* ecc : ec_seq)
       if (ecc->in_use)
         VW::finish_example(all, *ecc);
-  ec_seq.clear();
 }
 
 void return_multiple_example(vw& all, v_array<example*>& examples)

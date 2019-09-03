@@ -41,6 +41,23 @@ struct cbify
   std::vector<v_array<COST_SENSITIVE::wclass>> cs_costs;
   std::vector<v_array<CB::cb_class>> cb_costs;
   std::vector<ACTION_SCORE::action_scores> cb_as;
+
+  ~cbify()
+  {   
+    CB::cb_label.delete_label(&cb_label);
+    a_s.delete_v();
+
+    if (use_adf)
+    {
+      for (size_t a = 0; a < adf_data.num_actions; ++a)
+      {
+        adf_data.ecs[a]->pred.a_s.delete_v();
+        VW::dealloc_example(CB::cb_label.delete_label, *adf_data.ecs[a]);
+        free_it(adf_data.ecs[a]);
+      }
+      for (auto& as : cb_as) as.delete_v();
+    }
+  }
 };
 
 float loss(cbify& data, uint32_t label, uint32_t final_prediction)
@@ -77,34 +94,6 @@ float loss_csldf(cbify& data, std::vector<v_array<COST_SENSITIVE::wclass>>& cs_c
     }
   }
   return data.loss0 + (data.loss1 - data.loss0) * cost;
-}
-
-template <class T>
-inline void delete_it(T* p)
-{
-  if (p != nullptr)
-    delete p;
-}
-
-void finish(cbify& data)
-{
-  CB::cb_label.delete_label(&data.cb_label);
-  data.a_s.delete_v();
-
-  if (data.use_adf)
-  {
-    for (size_t a = 0; a < data.adf_data.num_actions; ++a)
-    {
-      data.adf_data.ecs[a]->pred.a_s.delete_v();
-      VW::dealloc_example(CB::cb_label.delete_label, *data.adf_data.ecs[a]);
-      free_it(data.adf_data.ecs[a]);
-    }
-    data.adf_data.ecs.~vector<example*>();
-    data.cs_costs.~vector<v_array<COST_SENSITIVE::wclass>>();
-    data.cb_costs.~vector<v_array<CB::cb_class>>();
-    for (auto as : data.cb_as) as.delete_v();
-    data.cb_as.~vector<ACTION_SCORE::action_scores>();
-  }
 }
 
 void copy_example_to_adf(cbify& data, example& ec)
@@ -248,6 +237,7 @@ void init_adf_data(cbify& data, const size_t num_actions)
     adf_data.ecs[a] = VW::alloc_examples(CB::cb_label.label_size, 1);
     auto& lab = adf_data.ecs[a]->l.cb;
     CB::cb_label.default_label(&lab);
+    adf_data.ecs[a]->interactions = &data.all->interactions;
   }
 }
 
@@ -390,7 +380,7 @@ void finish_multiline_example(vw& all, cbify&, multi_ex& ec_seq)
     output_example_seq(all, ec_seq);
     // global_print_newline(all);
   }
-  VW::clear_seq_and_finish_examples(all, ec_seq);
+  VW::finish_example(all, ec_seq);
 }
 
 base_learner* cbify_setup(options_i& options, vw& all)
@@ -461,7 +451,6 @@ base_learner* cbify_setup(options_i& options, vw& all)
     else
       l = &init_multiclass_learner(data, base, predict_or_learn<true, false>, predict_or_learn<false, false>, all.p, 1);
   }
-  l->set_finish(finish);
   all.delete_prediction = nullptr;
 
   return make_base(*l);
@@ -504,7 +493,6 @@ base_learner* cbifyldf_setup(options_i& options, vw& all)
   learner<cbify, multi_ex>& l = init_learner(
       data, base, do_actual_learning_ldf<true>, do_actual_learning_ldf<false>, 1, prediction_type::multiclass);
 
-  l.set_finish(finish);
   l.set_finish_example(finish_multiline_example);
   all.p->lp = COST_SENSITIVE::cs_label;
   all.delete_prediction = nullptr;

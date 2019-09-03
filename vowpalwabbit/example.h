@@ -18,21 +18,9 @@ license as described in the file LICENSE.
 #include "feature_group.h"
 #include "action_score.h"
 #include "example_predict.h"
+#include "conditional_contextual_bandit.h"
+#include "ccb_label.h"
 #include <vector>
-
-const unsigned char wap_ldf_namespace = 126;
-const unsigned char history_namespace = 127;
-const unsigned char constant_namespace = 128;
-const unsigned char nn_output_namespace = 129;
-const unsigned char autolink_namespace = 130;
-const unsigned char neighbor_namespace =
-    131;  // this is \x83 -- to do quadratic, say "-q a`printf "\x83"` on the command line
-const unsigned char affix_namespace = 132;         // this is \x84
-const unsigned char spelling_namespace = 133;      // this is \x85
-const unsigned char conditioning_namespace = 134;  // this is \x86
-const unsigned char dictionary_namespace = 135;    // this is \x87
-const unsigned char node_id_namespace = 136;       // this is \x88
-const unsigned char message_namespace = 137;       // this is \x89
 
 typedef union {
   no_label::no_label empty;
@@ -40,6 +28,7 @@ typedef union {
   MULTICLASS::label_t multi;
   COST_SENSITIVE::label cs;
   CB::label cb;
+  CCB::label conditional_contextual_bandit;
   CB_EVAL::label cb_eval;
   MULTILABEL::labels multilabels;
 } polylabel;
@@ -54,6 +43,7 @@ typedef union {
   float scalar;
   v_array<float> scalars;           // a sequence of scalar predictions
   ACTION_SCORE::action_scores a_s;  // a sequence of classes with scores.  Also used for probabilities.
+  CCB::decision_scores_t decision_scores;
   uint32_t multiclass;
   MULTILABEL::labels multilabels;
   float prob;  // for --probabilities --csoaa_ldf=mc
@@ -131,7 +121,5 @@ typedef std::vector<example*> multi_ex;
 
 namespace VW
 {
-void clear_seq_and_finish_examples(vw& all, multi_ex& ec_seq);
-
 void return_multiple_example(vw& all, v_array<example*>& examples);
 }  // namespace VW

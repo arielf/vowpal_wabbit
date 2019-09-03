@@ -7,6 +7,7 @@ license as described in the file LICENSE.
 The algorithm here is generally based on Nocedal 1980, Liu and Nocedal 1989.
 Implementation by Miro Dudik.
  */
+#include <cmath>
 #include <fstream>
 #include <float.h>
 #ifndef _WIN32
@@ -56,7 +57,7 @@ class curv_exception : public exception
 // w[2] = step direction
 // w[3] = preconditioner
 
-const float max_precond_ratio = 10000.f;
+constexpr float max_precond_ratio = 10000.f;
 
 struct bfgs
 {
@@ -102,9 +103,17 @@ struct bfgs
   bool first_pass;
   bool gradient_pass;
   bool preconditioner_pass;
+
+  ~bfgs()
+  {
+    predictions.delete_v();
+    free(mem);
+    free(rho);
+    free(alpha);
+  }
 };
 
-const char* curv_message =
+constexpr char* curv_message =
     "Zero or negative curvature detected.\n"
     "To increase curvature you can increase regularization or rescale features.\n"
     "It is also possible that you have reached numerical accuracy\n"
@@ -135,7 +144,7 @@ void reset_state(vw& all, bfgs& b, bool zero)
 // w[2] = step direction
 // w[3] = preconditioner
 
-bool test_example(example& ec) { return ec.l.simple.label == FLT_MAX; }
+constexpr bool test_example(example& ec) noexcept { return ec.l.simple.label == FLT_MAX; }
 
 float bfgs_predict(vw& all, example& ec)
 {
@@ -280,7 +289,7 @@ void bfgs_iter_middle(vw& all, bfgs& b, float* mem, double* rho, double* alpha, 
 
     float beta = (float)(g_Hy / g_Hg);
 
-    if (beta < 0.f || nanpattern(beta))
+    if (beta < 0.f || std::isnan(beta))
       beta = 0.f;
 
     for (typename T::iterator w = weights.begin(); w != weights.end(); ++w)
@@ -513,7 +522,7 @@ void finalize_preconditioner(vw& /* all */, bfgs& b, float regularization, T& we
 
   for (typename T::iterator w = weights.begin(); w != weights.end(); ++w)
   {
-    if (infpattern(*w) || *w > max_precond)
+    if (std::isinf(*w) || *w > max_precond)
       (&(*w))[W_COND] = max_precond;
   }
 }
@@ -714,7 +723,7 @@ int process_pass(vw& all, bfgs& b)
     /********************************************************************/
     /* B0) DERIVATIVE ZERO: MINIMUM FOUND *******************************/
     /********************************************************************/
-    if (nanpattern((float)wolfe1))
+    if (std::isnan((float)wolfe1))
     {
       fprintf(stderr, "\n");
       fprintf(stdout, "Derivative 0 detected.\n");
@@ -747,7 +756,7 @@ int process_pass(vw& all, bfgs& b)
     else
     {
       double rel_decrease = (b.previous_loss_sum - b.loss_sum) / b.previous_loss_sum;
-      if (!nanpattern((float)rel_decrease) && b.backstep_on && fabs(rel_decrease) < b.rel_threshold)
+      if (!std::isnan((float)rel_decrease) && b.backstep_on && fabs(rel_decrease) < b.rel_threshold)
       {
         fprintf(stdout,
             "\nTermination condition reached in pass %ld: decrease in loss less than %.3f%%.\n"
@@ -967,14 +976,6 @@ void learn(bfgs& b, base_learner& base, example& ec)
   }
 }
 
-void finish(bfgs& b)
-{
-  b.predictions.delete_v();
-  free(b.mem);
-  free(b.rho);
-  free(b.alpha);
-}
-
 void save_load_regularizer(vw& all, bfgs& b, io_buf& model_file, bool read, bool text)
 {
   int c = 0;
@@ -1166,7 +1167,6 @@ base_learner* bfgs_setup(options_i& options, vw& all)
   l->set_save_load(save_load);
   l->set_init_driver(init_driver);
   l->set_end_pass(end_pass);
-  l->set_finish(finish);
 
   return make_base(*l);
 }

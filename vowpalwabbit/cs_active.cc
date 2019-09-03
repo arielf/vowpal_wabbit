@@ -1,3 +1,4 @@
+#include <cmath>
 #include <errno.h>
 #include "reductions.h"
 #include "v_hashmap.h"
@@ -55,6 +56,11 @@ struct cs_active
   size_t labels_outside_range;
   float distance_to_range;
   float range;
+
+  ~cs_active()
+  {
+    examples_by_queries.delete_v();
+  }
 };
 
 float binarySearch(float fhat, float delta, float sens, float tol)
@@ -144,7 +150,7 @@ inline void find_cost_range(cs_active& cs_a, single_learner& base, example& ec, 
   base.predict(ec, i - 1);
   float sens = base.sensitivity(ec, i - 1);
 
-  if (cs_a.t <= 1 || nanpattern(sens) || infpattern(sens))
+  if (cs_a.t <= 1 || std::isnan(sens) || std::isinf(sens))
   {
     min_pred = cs_a.cost_min;
     max_pred = cs_a.cost_max;
@@ -301,8 +307,6 @@ void predict_or_learn(cs_active& cs_a, single_learner& base, example& ec)
 
 void finish_example(vw& all, cs_active& cs_a, example& ec) { CSOAA::finish_example(all, *(CSOAA::csoaa*)&cs_a, ec); }
 
-void finish(cs_active& data) { data.examples_by_queries.delete_v(); }
-
 base_learner* cs_active_setup(options_i& options, vw& all)
 {
   auto data = scoped_calloc_or_throw<cs_active>();
@@ -370,7 +374,6 @@ base_learner* cs_active_setup(options_i& options, vw& all)
             predict_or_learn<false, false>, data->num_classes, prediction_type::multilabels);
 
   l.set_finish_example(finish_example);
-  l.set_finish(finish);
   base_learner* b = make_base(l);
   all.cost_sensitive = b;
   return b;

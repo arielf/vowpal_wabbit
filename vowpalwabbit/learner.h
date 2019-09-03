@@ -11,6 +11,8 @@ license as described in the file LICENSE.
 #include "simple_label.h"
 #include "parser.h"
 
+#include <memory>
+
 namespace prediction_type
 {
 enum prediction_type_t
@@ -22,7 +24,8 @@ enum prediction_type_t
   multiclass,
   multilabels,
   prob,
-  multiclassprobs
+  multiclassprobs,
+  decision_probs
 };
 
 const char* to_string(prediction_type_t prediction_type);
@@ -92,7 +95,7 @@ struct finish_example_data
 };
 
 void generic_driver(vw& all);
-void generic_driver(std::vector<vw*> alls);
+void generic_driver(const std::vector<vw*>& alls);
 void generic_driver_onethread(vw& all);
 
 inline void noop_sl(void*, io_buf&, bool, bool) {}
@@ -141,8 +144,9 @@ struct learner
   func_data end_pass_fd;
   func_data end_examples_fd;
   func_data finisher_fd;
-  learner(){};  // Should only be able to construct a learner through init_learner function
 
+  std::shared_ptr<void> learner_data;
+  learner(){};  // Should only be able to construct a learner through init_learner function
  public:
   prediction_type::prediction_type_t pred_type;
   size_t weights;  // this stores the number of "weight vectors" required by the learner.
@@ -264,8 +268,8 @@ struct learner
     if (finisher_fd.data)
     {
       finisher_fd.func(finisher_fd.data);
-      free(finisher_fd.data);
     }
+    learner_data.~shared_ptr<void>();
     if (finisher_fd.base)
     {
       finisher_fd.base->finish();
@@ -314,7 +318,13 @@ struct learner
 
     if (base != nullptr)
     {  // a reduction
+
+      // This is a copy assignment into the current object. The purpose is to copy all of the
+      // function data objects so that if this reduction does not define a function such as
+      // save_load then calling save_load on this object will essentially result in forwarding the
+      // call the next reduction that actually implements it.
       ret = *(learner<T, E>*)(base);
+
       ret.learn_fd.base = make_base(*base);
       ret.sensitivity_fd.sensitivity_f = (sensitivity_data::fn)recur_sensitivity;
       ret.finisher_fd.data = dat;
@@ -337,6 +347,11 @@ struct learner
       ret.finish_example_fd.data = dat;
       ret.finish_example_fd.finish_example_f = (finish_example_data::fn)return_simple_example;
     }
+
+    ret.learner_data = std::shared_ptr<T>(dat, [](T* ptr) {
+      ptr->~T();
+      free(ptr);
+    });
 
     ret.learn_fd.data = dat;
     ret.learn_fd.learn_f = (learn_data::fn)learn;

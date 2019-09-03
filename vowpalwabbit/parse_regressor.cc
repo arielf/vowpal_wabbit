@@ -16,6 +16,7 @@ using namespace std;
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
+#include <cmath>
 #include <algorithm>
 #include <stdarg.h>
 #include <numeric>
@@ -74,9 +75,9 @@ void truncate(vw& all, T& weights)
 {
   static double sd = calculate_sd(all, weights);
   for_each(weights.begin(), weights.end(), [](float& v) {
-    if (abs(v) > sd * 2)
+    if (std::fabs(v) > sd * 2)
     {
-      v = (float)std::remainder(v, sd * 2);
+      v = (float)std::remainder(static_cast<double>(v), sd * 2);
     }
   });
 }
@@ -140,7 +141,7 @@ void initialize_regressor(vw& all)
     initialize_regressor(all, all.weights.dense_weights);
 }
 
-const size_t default_buf_size = 512;
+constexpr size_t default_buf_size = 512;
 
 bool resize_buf_if_needed(char*& __dest, size_t& __dest_size, const size_t __n)
 {
@@ -159,23 +160,6 @@ bool resize_buf_if_needed(char*& __dest, size_t& __dest_size, const size_t __n)
   return false;
 }
 
-int32_t safe_sprintf_s(char*& buf, size_t& buf_size, const char* fmt, ...)
-{
-  va_list args;
-  va_start(args, fmt);
-  int32_t len = vsprintf_s(buf, buf_size, fmt, args);
-  va_end(args);
-  if (len < 0)
-    THROW("Encoding error.");
-  if (resize_buf_if_needed(buf, buf_size, len + 1))
-  {
-    va_start(args, fmt);
-    vsprintf_s(buf, buf_size, fmt, args);
-    va_end(args);
-  }
-
-  return len;
-}
 
 inline void safe_memcpy(char*& __dest, size_t& __dest_size, const void* __src, size_t __n)
 {
@@ -196,10 +180,10 @@ void save_load_header(
     {
       size_t bytes_read_write = 0;
 
-      uint32_t v_length = (uint32_t)version.to_string().length() + 1;
+      uint32_t v_length = (uint32_t)VW::version.to_string().length() + 1;
       stringstream msg;
-      msg << "Version " << version.to_string() << "\n";
-      memcpy(buff2, version.to_string().c_str(), min(v_length, buf2_size));
+      msg << "Version " << VW::version.to_string() << "\n";
+      memcpy(buff2, VW::version.to_string().c_str(), min(v_length, buf2_size));
       if (read)
       {
         v_length = (uint32_t)buf2_size;

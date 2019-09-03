@@ -39,7 +39,7 @@ inline float cheesyrand(uint64_t x)
   return merand48(seed);
 }
 
-inline bool example_is_test(example& ec) { return ec.l.simple.label == FLT_MAX; }
+constexpr inline bool example_is_test(example& ec) { return ec.l.simple.label == FLT_MAX; }
 
 void reset_seed(LRQstate& lrq)
 {
@@ -157,8 +157,6 @@ void predict_or_learn(LRQstate& lrq, single_learner& base, example& ec)
   }
 }
 
-void finish(LRQstate& lrq) { lrq.lrpairs.~set<string>(); }
-
 base_learner* lrq_setup(options_i& options, vw& all)
 {
   auto lrq = scoped_calloc_or_throw<LRQstate>();
@@ -213,7 +211,6 @@ base_learner* lrq_setup(options_i& options, vw& all)
   learner<LRQstate, example>& l = init_learner(
       lrq, as_singleline(setup_base(options, all)), predict_or_learn<true>, predict_or_learn<false>, 1 + maxk);
   l.set_end_pass(reset_seed);
-  l.set_finish(finish);
 
   // TODO: leaks memory ?
   return make_base(l);
