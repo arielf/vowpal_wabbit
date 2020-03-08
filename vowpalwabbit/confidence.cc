@@ -1,3 +1,7 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #include "reductions.h"
 #include "vw.h"
 #include "math.h"
@@ -48,7 +52,7 @@ void confidence_print_result(int f, float res, float confidence, v_array<char> t
   {
     std::stringstream ss;
     ss << std::fixed << res << " " << confidence;
-    if (!print_tag(ss, tag))
+    if (!print_tag_by_ref(ss, tag))
       ss << ' ';
     ss << '\n';
     ssize_t len = ss.str().size();
@@ -67,7 +71,7 @@ void output_and_account_confidence_example(vw& all, example& ec)
     all.sd->weighted_labels += ld.label * ec.weight;
   all.sd->weighted_unlabeled_examples += ld.label == FLT_MAX ? ec.weight : 0;
 
-  all.print(all.raw_prediction, ec.partial_prediction, -1, ec.tag);
+  all.print_by_ref(all.raw_prediction, ec.partial_prediction, -1, ec.tag);
   for (size_t i = 0; i < all.final_prediction_sink.size(); i++)
   {
     int f = (int)all.final_prediction_sink[i];
@@ -97,9 +101,10 @@ base_learner* confidence_setup(options_i& options, vw& all)
 
   if (!all.training)
   {
-    std::cout << "Confidence does not work in test mode because learning algorithm state is needed.  Use --save_resume when "
-            "saving the model and avoid --test_only"
-         << std::endl;
+    std::cout
+        << "Confidence does not work in test mode because learning algorithm state is needed.  Use --save_resume when "
+           "saving the model and avoid --test_only"
+        << std::endl;
     return nullptr;
   }
 

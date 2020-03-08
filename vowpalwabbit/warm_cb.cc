@@ -1,4 +1,8 @@
-#include <float.h>
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
+#include <cfloat>
 #include "reductions.h"
 #include "cb_algs.h"
 #include "rand48.h"
@@ -153,12 +157,12 @@ void finish(warm_cb& data)
 {
   uint32_t argmin = find_min(data.cumulative_costs);
 
-  if (!data.all->quiet)
+  if (!data.all->logger.quiet)
   {
     std::cerr << "average variance estimate = " << data.cumu_var / data.inter_iter << std::endl;
     std::cerr << "theoretical average variance = " << data.num_actions / data.epsilon << std::endl;
     std::cerr << "last lambda chosen = " << data.lambdas[argmin] << " among lambdas ranging from " << data.lambdas[0]
-         << " to " << data.lambdas[data.choices_lambda - 1] << std::endl;
+              << " to " << data.lambdas[data.choices_lambda - 1] << std::endl;
   }
 }
 
@@ -568,7 +572,7 @@ base_learner* warm_cb_setup(options_i& options, vw& all)
       .add(make_option("warm_start", data->ws_period)
                .default_value(0U)
                .help("number of training examples for warm start phase"))
-      .add(make_option("epsilon", data->epsilon).keep().help("epsilon-greedy exploration"))
+      .add(make_option("epsilon", data->epsilon).keep().allow_override().help("epsilon-greedy exploration"))
       .add(make_option("interaction", data->inter_period)
                .default_value(UINT32_MAX)
                .help("number of examples for the interactive contextual bandit learning phase"))

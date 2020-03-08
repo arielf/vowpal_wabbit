@@ -1,8 +1,6 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD (revised)
-license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 #include <cfloat>
 #include <cmath>
 #include <cerrno>
@@ -30,10 +28,7 @@ struct bs
   vw* all;  // for raw prediction and loss
   std::shared_ptr<rand_state> _random_state;
 
-  ~bs()
-  {
-    delete pred_vec;
-  }
+  ~bs() { delete pred_vec; }
 };
 
 void bs_predict_mean(vw& all, example& ec, std::vector<double>& pred_vec)
@@ -142,7 +137,7 @@ void print_result(int f, float res, v_array<char> tag, float lb, float ub)
   {
     std::stringstream ss;
     ss << std::fixed << res;
-    print_tag(ss, tag);
+    print_tag_by_ref(ss, tag);
     ss << std::fixed << ' ' << lb << ' ' << ub << '\n';
     ssize_t len = ss.str().size();
     ssize_t t = io_buf::write_file_or_socket(f, ss.str().c_str(), (unsigned int)len);
@@ -222,7 +217,7 @@ void predict_or_learn(bs& d, single_learner& base, example& ec)
   }
 
   if (shouldOutput)
-    all.print_text(all.raw_prediction, outputStringStream.str(), ec.tag);
+    all.print_text_by_ref(all.raw_prediction, outputStringStream.str(), ec.tag);
 }
 
 void finish_example(vw& all, bs& d, example& ec)

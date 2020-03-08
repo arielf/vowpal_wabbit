@@ -1,3 +1,7 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #include "conditional_contextual_bandit.h"
 #include "reductions.h"
 #include "example.h"
@@ -90,7 +94,7 @@ bool split_multi_example_and_stash_labels(const multi_ex& examples, ccb& data)
 
     // Stash the CCB labels before rewriting them.
     data.stored_labels.push_back({ex->l.conditional_contextual_bandit.type, ex->l.conditional_contextual_bandit.outcome,
-        ex->l.conditional_contextual_bandit.explicit_included_actions});
+        ex->l.conditional_contextual_bandit.explicit_included_actions, 0.});
   }
 
   return true;
@@ -174,7 +178,7 @@ void save_action_scores(ccb& data, decision_scores_t& decision_scores)
 
 void clear_pred_and_label(ccb& data)
 {
-   // Don't need to return to pool, as that will be done when the example is output.
+  // Don't need to return to pool, as that will be done when the example is output.
 
   // This just needs to be cleared as it is reused.
   data.actions[data.action_with_label]->l.cb.costs.clear();
@@ -461,7 +465,7 @@ void learn_or_predict(ccb& data, multi_learner& base, multi_ex& examples)
   for (size_t i = 0; i < examples.size(); i++)
   {
     examples[i]->l.conditional_contextual_bandit = {
-        data.stored_labels[i].type, data.stored_labels[i].outcome, data.stored_labels[i].explicit_included_actions};
+        data.stored_labels[i].type, data.stored_labels[i].outcome, data.stored_labels[i].explicit_included_actions, 0.};
   }
 
   // Save the predictions
@@ -492,7 +496,7 @@ void print_decision_scores(int f, decision_scores_t& decision_scores)
 
 void print_update(vw& all, std::vector<example*>& slots, decision_scores_t& decision_scores, size_t num_features)
 {
-  if (all.sd->weighted_examples() >= all.sd->dump_interval && !all.quiet && !all.bfgs)
+  if (all.sd->weighted_examples() >= all.sd->dump_interval && !all.logger.quiet && !all.bfgs)
   {
     std::string label_str = "";
     std::string delim = "";
@@ -646,7 +650,7 @@ base_learner* ccb_explore_adf_setup(options_i& options, vw& all)
     options.add_and_parse(new_options);
   }
 
-  if(options.was_supplied("cb_sample") && slate)
+  if (options.was_supplied("cb_sample") && slate)
   {
     THROW("--slate and --cb_sample cannot be supplied together");
   }
@@ -659,7 +663,7 @@ base_learner* ccb_explore_adf_setup(options_i& options, vw& all)
 
   auto base = as_multiline(setup_base(options, all));
   all.p->lp = CCB::ccb_label_parser;
-  all.label_type = label_type::ccb;
+  all.label_type = label_type_t::ccb;
 
   // Stash the base learners stride_shift so we can properly add a feature later.
   data->base_learner_stride_shift = all.weights.stride_shift();
@@ -675,7 +679,7 @@ base_learner* ccb_explore_adf_setup(options_i& options, vw& all)
   data->id_namespace_hash = VW::hash_space(all, data->id_namespace_str);
 
   learner<ccb, multi_ex>& l =
-      init_learner(data, base, learn_or_predict<true>, learn_or_predict<false>, 1, prediction_type::decision_probs);
+      init_learner(data, base, learn_or_predict<true>, learn_or_predict<false>, 1, prediction_type_t::decision_probs);
 
   all.delete_prediction = ACTION_SCORE::delete_action_scores;
 

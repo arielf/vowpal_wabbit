@@ -1,4 +1,8 @@
-#include <float.h>
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
+#include <cfloat>
 #include <cassert>
 
 #include "gd.h"
@@ -71,7 +75,7 @@ struct stagewise_poly
     cout << "total feature number (after poly expansion!) = " << sum_sparsity << std::endl;
 #endif  // DEBUG
 
-    synth_ec.feature_space[tree_atomics].delete_v();
+    //synth_ec.feature_space[tree_atomics].delete_v();
     synth_ec.indices.delete_v();
     free(sd);
     free(depthsbits);
@@ -339,8 +343,8 @@ void sort_data_update_support(stagewise_poly &poly)
         poly.sd[pos].wid != constant_feat_masked(poly));
     parent_toggle(poly, poly.sd[pos].wid);
 #ifdef DEBUG
-    std::cout << "Adding feature " << pos << "/" << num_new_features << " || wid " << poly.sd[pos].wid << " || sort value "
-         << poly.sd[pos].weightsal << std::endl;
+    std::cout << "Adding feature " << pos << "/" << num_new_features << " || wid " << poly.sd[pos].wid
+              << " || sort value " << poly.sd[pos].weightsal << std::endl;
 #endif  // DEBUG
   }
 
@@ -392,7 +396,6 @@ void synthetic_reset(stagewise_poly &poly, example &ec)
   poly.synth_ec.test_only = ec.test_only;
   poly.synth_ec.end_pass = ec.end_pass;
   poly.synth_ec.sorted = ec.sorted;
-  poly.synth_ec.in_use = ec.in_use;
 
   poly.synth_ec.feature_space[tree_atomics].clear();
   poly.synth_ec.num_features = 0;
@@ -428,8 +431,8 @@ void synthetic_create_rec(stagewise_poly &poly, float v, uint64_t findex)
     if (parent_get(poly, wid_cur))
     {
 #ifdef DEBUG
-     std::cout << "FOUND A TRANSPLANT!!! moving [" << wid_cur << "] from depth " << (uint64_t)min_depths_get(poly, wid_cur)
-           << " to depth " << poly.cur_depth << std::endl;
+      std::cout << "FOUND A TRANSPLANT!!! moving [" << wid_cur << "] from depth "
+                << (uint64_t)min_depths_get(poly, wid_cur) << " to depth " << poly.cur_depth << std::endl;
 #endif  // DEBUG
       // XXX arguably, should also fear transplants that occured with
       // a different ft_offset ; e.g., need to look out for cross-reduction

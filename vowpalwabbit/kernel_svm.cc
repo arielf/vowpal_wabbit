@@ -1,20 +1,12 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD (revised)
-license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 #include <fstream>
 #include <sstream>
-#include <float.h>
-#ifdef _WIN32
-#define NOMINMAX
-#include <WinSock2.h>
-#else
-#include <netdb.h>
-#endif
-#include <string.h>
-#include <stdio.h>
-#include <assert.h>
+#include <cfloat>
+#include <cstring>
+#include <cstdio>
+#include <cassert>
 #include <memory>
 
 #include "parse_example.h"
@@ -148,7 +140,7 @@ struct svm_params
 
 void svm_example::init_svm_example(flat_example* fec)
 {
-  ex = *fec;
+  ex = std::move(*fec);
   free(fec);
 }
 
@@ -156,9 +148,11 @@ svm_example::~svm_example()
 {
   krow.delete_v();
   // free flatten example contents
-  flat_example* fec = &calloc_or_throw<flat_example>();
-  *fec = ex;
-  free_flatten_example(fec);  // free contents of flat example and frees fec.
+  //flat_example* fec = &calloc_or_throw<flat_example>();
+  //*fec = ex;
+  //free_flatten_example(fec);  // free contents of flat example and frees fec.
+  if (ex.tag_len > 0)
+    free(ex.tag);
 }
 
 float kernel_function(const flat_example* fec1, const flat_example* fec2, void* params, size_t kernel_type);
@@ -422,7 +416,7 @@ float poly_kernel(const flat_example* fec1, const flat_example* fec2, int power)
 {
   float dotprod = linear_kernel(fec1, fec2);
   // std::cerr<<"Bandwidth = "<<bandwidth<< endl;
-  //std::cout<<pow(1 + dotprod, power)<< endl;
+  // std::cout<<pow(1 + dotprod, power)<< endl;
   return pow(1 + dotprod, power);
 }
 
@@ -447,7 +441,7 @@ float kernel_function(const flat_example* fec1, const flat_example* fec2, void* 
   return 0;
 }
 
-float dense_dot(float* v1, v_array<float> v2, size_t n)
+float dense_dot(float* v1, const v_array<float>& v2, size_t n)
 {
   float dot_prod = 0.;
   for (size_t i = 0; i < n; i++) dot_prod += v1[i] * v2[i];
@@ -460,7 +454,7 @@ void predict(svm_params& params, svm_example** ec_arr, float* scores, size_t n)
   for (size_t i = 0; i < n; i++)
   {
     ec_arr[i]->compute_kernels(params);
-    //std::cout<<"size of krow = "<<ec_arr[i]->krow.size()<< endl;
+    // std::cout<<"size of krow = "<<ec_arr[i]->krow.size()<< endl;
     if (ec_arr[i]->krow.size() > 0)
       scores[i] = dense_dot(ec_arr[i]->krow.begin(), model->alpha, model->num_support) / params.lambda;
     else
@@ -780,7 +774,7 @@ void train(svm_params& params)
       if (model_pos >= 0)
       {
         bool overshoot = update(params, model_pos);
-        //std::cout<<model_pos<<":alpha = "<<model->alpha[model_pos]<< endl;
+        // std::cout<<model_pos<<":alpha = "<<model->alpha[model_pos]<< endl;
 
         double* subopt = calloc_or_throw<double>(model->num_support);
         for (size_t j = 0; j < params.reprocess; j++)

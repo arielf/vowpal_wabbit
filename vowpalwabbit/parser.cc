@@ -1,8 +1,6 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD (revised)
-license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 #include <sys/types.h>
 
 #ifndef _WIN32
@@ -22,6 +20,8 @@ license as described in the file LICENSE.
 #include <Windows.h>
 #include <io.h>
 typedef int socklen_t;
+//windows doesn't define SOL_TCP and use an enum for the later, so can't check for its presence with a macro.
+#define SOL_TCP IPPROTO_TCP
 
 int daemon(int /*a*/, int /*b*/)
 {
@@ -41,7 +41,7 @@ int getpid() { return (int)::GetCurrentProcessId(); }
 #include <netdb.h>
 #endif
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__)
 #include <netinet/in.h>
 #endif
 
@@ -59,6 +59,11 @@ int getpid() { return (int)::GetCurrentProcessId(); }
 #include "parse_example_json.h"
 #include "parse_dispatch_loop.h"
 #include "parse_args.h"
+
+// OSX doesn't expects you to use IPPROTO_TCP instead of SOL_TCP
+#if !defined(SOL_TCP) && defined(IPPROTO_TCP)
+#define SOL_TCP IPPROTO_TCP
+#endif
 
 using std::endl;
 
@@ -161,7 +166,7 @@ void reset_source(vw& all, size_t numbits)
       // wait for all predictions to be sent back to client
       {
         std::unique_lock<std::mutex> lock(all.p->output_lock);
-        all.p->output_done.wait(lock, [&] { return all.p->ready_parsed_examples.size() == 0; });
+        all.p->output_done.wait(lock, [&] { return all.p->finished_examples == all.p->end_parsed_examples && all.p->ready_parsed_examples.size() == 0; });
       }
 
       // close socket, erase final prediction sink and socket
@@ -175,6 +180,10 @@ void reset_source(vw& all, size_t numbits)
       if (f < 0)
         THROW("accept: " << strerror(errno));
 
+      // Disable Nagle delay algorithm due to daemon mode's interactive workload
+      int one = 1;
+      setsockopt(f, SOL_TCP, TCP_NODELAY, reinterpret_cast<char*>(&one), sizeof(one));
+
       // note: breaking cluster parallel online learning by dropping support for id
 
       all.final_prediction_sink.push_back((size_t)f);
@@ -183,12 +192,18 @@ void reset_source(vw& all, size_t numbits)
       if (isbinary(*(all.p->input)))
       {
         all.p->reader = read_cached_features;
+IGNORE_DEPRECATED_USAGE_START
         all.print = binary_print_result;
+IGNORE_DEPRECATED_USAGE_END
+        all.print_by_ref = binary_print_result_by_ref;
       }
       else
       {
         all.p->reader = read_features_string;
+IGNORE_DEPRECATED_USAGE_START
         all.print = print_result;
+IGNORE_DEPRECATED_USAGE_END
+        all.print_by_ref = print_result_by_ref;
       }
     }
     else
@@ -314,6 +329,9 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
   all.p->input->current = 0;
   parse_cache(all, input_options.cache_files, input_options.kill_cache, quiet);
 
+  // default text reader
+  all.p->text_reader = VW::read_lines;
+
   if (all.daemon || all.active)
   {
 #ifdef _WIN32
@@ -389,8 +407,17 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
       if (!pid_file.is_open())
         THROW("error writing pid file");
 
+#ifdef _WIN32
+#pragma warning(push)          // This next line is inappropriately triggering the Windows-side warning about getpid()
+#pragma warning(disable: 4996) // In newer toolchains, we are properly calling _getpid(), via the #define above (line 33).
+#endif
+
       pid_file << getpid() << endl;
       pid_file.close();
+
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
     }
 
     if (all.daemon && !all.active)
@@ -408,6 +435,7 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
       memcpy(sd, all.sd, sizeof(shared_data));
       free(all.sd);
       all.sd = sd;
+      all.p->_shared_data = sd;
 
       // create children
       size_t num_children = all.num_children;
@@ -419,7 +447,7 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
         // store fork value and run child process if child
         if ((children[i] = fork()) == 0)
         {
-          all.quiet |= (i > 0);
+          all.logger.quiet |= (i > 0);
           goto child;
         }
       }
@@ -452,7 +480,7 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
           {
             if ((children[i] = fork()) == 0)
             {
-              all.quiet |= (i > 0);
+              all.logger.quiet |= (i > 0);
               goto child;
             }
             break;
@@ -468,20 +496,27 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
     sockaddr_in client_address;
     socklen_t size = sizeof(client_address);
     all.p->max_fd = 0;
-    if (!all.quiet)
+    if (!all.logger.quiet)
       all.trace_message << "calling accept" << endl;
     int f = (int)accept(all.p->bound_sock, (sockaddr*)&client_address, &size);
     if (f < 0)
       THROWERRNO("accept");
 
+    // Disable Nagle delay algorithm due to daemon mode's interactive workload
+    int one = 1;
+    setsockopt(f, SOL_TCP, TCP_NODELAY, reinterpret_cast<char*>(&one), sizeof(one));
+
     all.p->label_sock = f;
+IGNORE_DEPRECATED_USAGE_START
     all.print = print_result;
+IGNORE_DEPRECATED_USAGE_END
+    all.print_by_ref = print_result_by_ref;
 
     all.final_prediction_sink.push_back((size_t)f);
 
     all.p->input->files.push_back(f);
     all.p->max_fd = std::max(f, all.p->max_fd);
-    if (!all.quiet)
+    if (!all.logger.quiet)
       all.trace_message << "reading data from port " << port << endl;
 
     all.p->max_fd++;
@@ -492,7 +527,10 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
       if (isbinary(*(all.p->input)))
       {
         all.p->reader = read_cached_features;
+IGNORE_DEPRECATED_USAGE_START
         all.print = binary_print_result;
+IGNORE_DEPRECATED_USAGE_END
+        all.print_by_ref = binary_print_result_by_ref;
       }
       else
       {
@@ -518,7 +556,7 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
       {
         all.p->input->open_file(temp.c_str(), all.stdin_off, io_buf::READ);
       }
-      catch (std::exception const& ex)
+      catch (std::exception const&)
       {
         // when trying to fix this exception, consider that an empty temp is valid if all.stdin_off is false
         if (!temp.empty())
@@ -527,13 +565,12 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
         }
         else
         {
-          throw ex;
+          throw;
         }
       }
 
       if (input_options.json || input_options.dsjson)
       {
-
         // TODO: change to class with virtual method
         // --invert_hash requires the audit parser version to save the extra information.
         if (all.audit || all.hash_inv)
@@ -558,6 +595,7 @@ void enable_sources(vw& all, bool quiet, size_t passes, input_options& input_opt
       }
 
       all.p->resettable = all.p->write_cache;
+      all.chain_hash = input_options.chain_hash;
     }
   }
 
@@ -666,7 +704,6 @@ example& get_unused_example(vw* all)
 {
   parser* p = all->p;
   auto ex = p->example_pool.get_object();
-  ex->in_use = true;
   p->begin_parsed_examples++;
   return *ex;
 }
@@ -692,12 +729,14 @@ void setup_example(vw& all, example* ae)
   ae->total_sum_feat_sq = 0;
   ae->loss = 0.;
 
-  ae->example_counter = (size_t)(all.p->end_parsed_examples);
+  ae->example_counter = (size_t)(all.p->end_parsed_examples.load());
   if (!all.p->emptylines_separate_examples)
     all.p->in_pass_counter++;
 
+  // Determine if this example is part of the holdout set.
   ae->test_only = is_test_only(all.p->in_pass_counter, all.holdout_period, all.holdout_after, all.holdout_set_off,
       all.p->emptylines_separate_examples ? (all.holdout_period - 1) : 0);
+  // If this example has a test only label then it is true regardless.
   ae->test_only |= all.p->lp.test_label(&ae->l);
 
   if (all.p->emptylines_separate_examples && example_is_newline(*ae))
@@ -732,7 +771,7 @@ void setup_example(vw& all, example* ae)
       for (auto& j : fs.indicies) j *= multiplier;
   ae->num_features = 0;
   ae->total_sum_feat_sq = 0;
-  for (features& fs : *ae)
+  for (const features& fs : *ae)
   {
     ae->num_features += fs.size();
     ae->total_sum_feat_sq += fs.sum_feat_sq;
@@ -756,7 +795,7 @@ example* new_unused_example(vw& all)
   example* ec = &get_unused_example(&all);
   all.p->lp.default_label(&ec->l);
   all.p->begin_parsed_examples++;
-  ec->example_counter = (size_t)all.p->begin_parsed_examples;
+  ec->example_counter = (size_t)all.p->begin_parsed_examples.load();
   return ec;
 }
 example* read_example(vw& all, char* example_line)
@@ -846,11 +885,10 @@ void releaseFeatureSpace(primitive_feature_space* features, size_t len)
 
 void parse_example_label(vw& all, example& ec, std::string label)
 {
-  v_array<substring> words = v_init<substring>();
-  char* cstr = (char*)label.c_str();
-  substring str = {cstr, cstr + label.length()};
-  tokenize(' ', str, words);
-  all.p->lp.parse_label(all.p, all.sd, &ec.l, words);
+  v_array<VW::string_view> words = v_init<VW::string_view>();
+
+  tokenize(' ', label, words);
+  all.p->lp.parse_label(all.p, all.p->_shared_data, &ec.l, words);
   words.clear();
   words.delete_v();
 }
@@ -869,13 +907,11 @@ void clean_example(vw& all, example& ec, bool rewind)
 {
   if (rewind)
   {
-    assert(all.p->begin_parsed_examples > 0);
+    assert(all.p->begin_parsed_examples.load() > 0);
     all.p->begin_parsed_examples--;
   }
 
   empty_example(all, ec);
-  assert(ec.in_use);
-  ec.in_use = false;
   all.p->example_pool.return_object(&ec);
 }
 
@@ -889,12 +925,13 @@ void finish_example(vw& all, example& ec)
 
   {
     std::lock_guard<std::mutex> lock(all.p->output_lock);
+    ++all.p->finished_examples;
     all.p->output_done.notify_one();
   }
 }
 }  // namespace VW
 
-void thread_dispatch(vw& all, v_array<example*> examples)
+void thread_dispatch(vw& all, const v_array<example*>& examples)
 {
   all.p->end_parsed_examples += examples.size();
   for (auto example : examples)
@@ -958,24 +995,48 @@ float get_confidence(example* ec) { return ec->confidence; }
 example* example_initializer::operator()(example* ex)
 {
   memset(&ex->l, 0, sizeof(polylabel));
-  ex->in_use = false;
   ex->passthrough = nullptr;
   ex->tag = v_init<char>();
   ex->indices = v_init<namespace_index>();
-  memset(&ex->feature_space, 0, sizeof(ex->feature_space));
+IGNORE_DEPRECATED_USAGE_START
+  ex->in_use = true;
+IGNORE_DEPRECATED_USAGE_END
+  memset(ex->feature_space.data(), 0, ex->feature_space.size() * sizeof(ex->feature_space[0]));
   return ex;
 }
 
-void adjust_used_index(vw&) { /* no longer used */ }
+void adjust_used_index(vw&)
+{ /* no longer used */
+}
 
 namespace VW
 {
 void start_parser(vw& all) { all.parse_thread = std::thread(main_parse_loop, &all); }
 }  // namespace VW
+
+// a copy of dealloc_example except that this does not call the example destructor
+// Work to remove this is currently in progress
+void cleanup_example(void(*delete_label)(void*), example& ec, void(*delete_prediction)(void*))
+{
+  if (delete_label)
+    delete_label(&ec.l);
+
+  if (delete_prediction)
+    delete_prediction(&ec.pred);
+
+  ec.tag.delete_v();
+
+  if (ec.passthrough)
+  {
+    delete ec.passthrough;
+  }
+
+  ec.indices.delete_v();
+}
+
 void free_parser(vw& all)
 {
   all.p->words.delete_v();
-  all.p->name.delete_v();
 
   if (!all.ngram_strings.empty())
     all.p->gram_mask.delete_v();
@@ -990,13 +1051,13 @@ void free_parser(vw& all)
   while (!all.p->example_pool.empty())
   {
     example* temp = all.p->example_pool.get_object();
-    VW::dealloc_example(all.p->lp.delete_label, *temp, all.delete_prediction);
+    cleanup_example(all.p->lp.delete_label, *temp, all.delete_prediction);
   }
 
   while (all.p->ready_parsed_examples.size() != 0)
   {
     example* temp = all.p->ready_parsed_examples.pop();
-    VW::dealloc_example(all.p->lp.delete_label, *temp, all.delete_prediction);
+    cleanup_example(all.p->lp.delete_label, *temp, all.delete_prediction);
   }
   all.p->counts.delete_v();
 }

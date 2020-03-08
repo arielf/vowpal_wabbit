@@ -5,13 +5,21 @@ pool:
   vmImage: 'ubuntu-16.04'
 
 container:
-  image: vowpalwabbit/ubuntu1604-build:0.1.0
+  image: vowpalwabbit/ubuntu1604-build:0.3.0
   endpoint: DockerHub
+
+strategy:
+  matrix:
+    Debug:
+      BUILD_CONFIGURATION: 'Debug'
+    Release:
+      BUILD_CONFIGURATION: 'Release'
+  maxParallel: 2
 
 steps:
 - bash: ./.scripts/linux/clang-format-check.sh
   displayName: Clang format check
-- bash: ./.scripts/linux/build.sh
+- bash: ./.scripts/linux/build.sh $(BUILD_CONFIGURATION)
   displayName: Build C++
 - bash: ./.scripts/linux/test.sh
   displayName: Test C++

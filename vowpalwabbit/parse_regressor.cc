@@ -1,8 +1,6 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD (revised)
-license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 #include <fstream>
 #include <iostream>
 
@@ -12,19 +10,22 @@ license as described in the file LICENSE.
 #include <unistd.h>
 #endif
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <math.h>
+#include <cstdlib>
+#include <cstdint>
 #include <cmath>
+#include <cstdarg>
+
+#include <fstream>
+#include <iostream>
 #include <algorithm>
-#include <stdarg.h>
 #include <numeric>
+
+#include "crossplat_compat.h"
 #include "rand48.h"
 #include "global_data.h"
 #include "vw_exception.h"
 #include "vw_validate.h"
 #include "vw_versions.h"
-
 #include "options_serializer_boost_po.h"
 
 template <class T>
@@ -158,7 +159,6 @@ bool resize_buf_if_needed(char*& __dest, size_t& __dest_size, const size_t __n)
   }
   return false;
 }
-
 
 inline void safe_memcpy(char*& __dest, size_t& __dest_size, const void* __src, size_t __n)
 {
@@ -584,12 +584,13 @@ void read_regressor_file(vw& all, std::vector<std::string> all_intial, io_buf& i
   if (all_intial.size() > 0)
   {
     io_temp.open_file(all_intial[0].c_str(), all.stdin_off, io_buf::READ);
-    if (!all.quiet)
+    if (!all.logger.quiet)
     {
       // all.trace_message << "initial_regressor = " << regs[0] << std::endl;
       if (all_intial.size() > 1)
       {
-        all.trace_message << "warning: ignoring remaining " << (all_intial.size() - 1) << " initial regressors" << std::endl;
+        all.trace_message << "warning: ignoring remaining " << (all_intial.size() - 1) << " initial regressors"
+                          << std::endl;
       }
     }
   }

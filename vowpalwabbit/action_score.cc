@@ -1,5 +1,11 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #include "v_array.h"
 #include "action_score.h"
+
+#include "v_array.h"
 #include "io_buf.h"
 #include "global_data.h"
 
@@ -17,7 +23,7 @@ void print_action_score(int f, v_array<action_score>& a_s, v_array<char>& tag)
         ss << ',';
       ss << a_s[i].action << ':' << a_s[i].score;
     }
-    print_tag(ss, tag);
+    print_tag_by_ref(ss, tag);
     ss << '\n';
     ssize_t len = ss.str().size();
     ssize_t t = io_buf::write_file_or_socket(f, ss.str().c_str(), (unsigned int)len);

@@ -1,14 +1,14 @@
-/*
- Copyright (c) by respective owners including Yahoo!, Microsoft, and
- individual contributors. All rights reserved.  Released under a BSD (revised)
- license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #ifdef _WIN32
 #define NOMINMAX
 #include <winsock2.h>
 #else
 #include <netdb.h>
 #endif
+
 #include "reductions.h"
 #include "gd.h"
 
@@ -105,7 +105,7 @@ void predict(mf& data, single_learner& base, example& ec)
 
   // finalize prediction
   ec.partial_prediction = prediction;
-  ec.pred.scalar = GD::finalize_prediction(data.all->sd, ec.partial_prediction);
+  ec.pred.scalar = GD::finalize_prediction(data.all->sd, data.all->logger, ec.partial_prediction);
 }
 
 void learn(mf& data, single_learner& base, example& ec)

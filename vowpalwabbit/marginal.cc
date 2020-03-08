@@ -1,3 +1,7 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #include <unordered_map>
 #include "reductions.h"
 #include "correctedMath.h"
@@ -38,11 +42,6 @@ struct data
       expert_state;  // pair of weights on marginal and feature based predictors, one per marginal feature
 
   vw* all;
-
-  ~data()
-  {
-    for (size_t i = 0; i < 256; i++) temp[i].delete_v();
-  }
 };
 
 float get_adanormalhedge_weights(float R, float C)
@@ -78,15 +77,15 @@ void make_marginal(data& sm, example& ec)
         uint64_t first_index = j.index() & mask;
         if (++j == sm.temp[n].end())
         {
-          std::cout << "warning: id feature namespace has " << sm.temp[n].size() << " features. Should be a multiple of 2"
-               << std::endl;
+          std::cout << "warning: id feature namespace has " << sm.temp[n].size()
+                    << " features. Should be a multiple of 2" << std::endl;
           break;
         }
         float second_value = j.value();
         uint64_t second_index = j.index() & mask;
         if (first_value != 1. || second_value != 1.)
         {
-         std::cout << "warning: bad id features, must have value 1." << std::endl;
+          std::cout << "warning: bad id features, must have value 1." << std::endl;
           continue;
         }
         uint64_t key = second_index + ec.ft_offset;

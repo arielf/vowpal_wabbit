@@ -1,9 +1,12 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #include <cmath>
 #include <errno.h>
 #include "reductions.h"
-#include "v_hashmap.h"
 #include "rand48.h"
-#include "float.h"
+#include <cfloat>
 #include "vw.h"
 #include "vw_exception.h"
 #include "csoaa.h"
@@ -59,10 +62,7 @@ struct cs_active
   float distance_to_range;
   float range;
 
-  ~cs_active()
-  {
-    examples_by_queries.delete_v();
-  }
+  ~cs_active() { examples_by_queries.delete_v(); }
 };
 
 float binarySearch(float fhat, float delta, float sens, float tol)
@@ -245,7 +245,8 @@ void predict_or_learn(cs_active& cs_a, single_learner& base, example& ec)
       n_overlapped += (uint32_t)(lqd.is_range_overlapped);
       // large_range = large_range || (cl.is_range_overlapped && cl.is_range_large);
       // if(cl.is_range_overlapped && is_learn)
-      //{ std::cout << "label " << cl.class_index << ", min_pred = " << cl.min_pred << ", max_pred = " << cl.max_pred << ",
+      //{ std::cout << "label " << cl.class_index << ", min_pred = " << cl.min_pred << ", max_pred = " << cl.max_pred <<
+      //",
       // is_range_large = " << cl.is_range_large << ", eta = " << eta << ", min_max_cost = " << min_max_cost << endl;
       //}
       cs_a.overlapped_and_range_small += (size_t)(lqd.is_range_overlapped && !lqd.is_range_large);
@@ -371,9 +372,9 @@ base_learner* cs_active_setup(options_i& options, vw& all)
 
   learner<cs_active, example>& l = simulation
       ? init_learner(data, as_singleline(setup_base(options, all)), predict_or_learn<true, true>,
-            predict_or_learn<false, true>, data->num_classes, prediction_type::multilabels)
+            predict_or_learn<false, true>, data->num_classes, prediction_type_t::multilabels)
       : init_learner(data, as_singleline(setup_base(options, all)), predict_or_learn<true, false>,
-            predict_or_learn<false, false>, data->num_classes, prediction_type::multilabels);
+            predict_or_learn<false, false>, data->num_classes, prediction_type_t::multilabels);
 
   l.set_finish_example(finish_example);
   base_learner* b = make_base(l);

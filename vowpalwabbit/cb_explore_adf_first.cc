@@ -1,3 +1,7 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #include "cb_explore_adf_first.h"
 
 #include "reductions.h"
@@ -37,8 +41,7 @@ struct cb_explore_adf_first
   void predict_or_learn_impl(LEARNER::multi_learner& base, multi_ex& examples);
 };
 
-cb_explore_adf_first::cb_explore_adf_first(size_t tau, float epsilon)
-  : _tau(tau), _epsilon(epsilon) {}
+cb_explore_adf_first::cb_explore_adf_first(size_t tau, float epsilon) : _tau(tau), _epsilon(epsilon) {}
 
 template <bool is_learn>
 void cb_explore_adf_first::predict_or_learn_impl(LEARNER::multi_learner& base, multi_ex& examples)
@@ -80,7 +83,7 @@ LEARNER::base_learner* setup(config::options_i& options, vw& all)
                .keep()
                .help("Online explore-exploit for a contextual bandit problem with multiline action dependent features"))
       .add(make_option("first", tau).keep().help("tau-first exploration"))
-      .add(make_option("epsilon", epsilon).keep().help("epsilon-greedy exploration"));
+      .add(make_option("epsilon", epsilon).keep().allow_override().help("epsilon-greedy exploration"));
   options.add_and_parse(new_options);
 
   if (!cb_explore_adf_option || !options.was_supplied("first"))
@@ -98,13 +101,18 @@ LEARNER::base_learner* setup(config::options_i& options, vw& all)
 
   LEARNER::multi_learner* base = LEARNER::as_multiline(setup_base(options, all));
   all.p->lp = CB::cb_label;
-  all.label_type = label_type::cb;
+  all.label_type = label_type_t::cb;
 
   using explore_type = cb_explore_adf_base<cb_explore_adf_first>;
   auto data = scoped_calloc_or_throw<explore_type>(tau, epsilon);
-
-  LEARNER::learner<explore_type, multi_ex>& l = LEARNER::init_learner(data, base, explore_type::learn,
-      explore_type::predict, problem_multiplier, prediction_type::action_probs);
+  
+  if (epsilon < 0.0 || epsilon > 1.0)
+  {
+    THROW("The value of epsilon must be in [0,1]");
+  }
+  
+  LEARNER::learner<explore_type, multi_ex>& l = LEARNER::init_learner(
+      data, base, explore_type::learn, explore_type::predict, problem_multiplier, prediction_type_t::action_probs);
 
   l.set_finish_example(explore_type::finish_multiline_example);
   return make_base(l);

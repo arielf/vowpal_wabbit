@@ -1,4 +1,9 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #include "options_boost_po.h"
+#include "parse_primitives.h"
 
 #include <sstream>
 
@@ -7,6 +12,18 @@
 #include <utility>
 
 using namespace VW::config;
+
+bool is_number(const VW::string_view& s)
+{
+  size_t endidx = 0;
+  auto f = parseFloat(s.begin(), endidx, s.end());
+  if ((endidx == 0 && !s.empty()) || std::isnan(f))
+  {
+    return false;
+  }
+
+  return true;
+}
 
 template <>
 po::typed_value<std::vector<bool>>* options_boost_po::convert_to_boost_value(std::shared_ptr<typed_option<bool>>& opt)
@@ -61,6 +78,13 @@ void options_boost_po::add_and_parse(const option_group_definition& group)
 
     for (auto const& option : parsed_options.options)
     {
+      // If the supplied option is interpreted as a number, then ignore it. There are no options like this and it is
+      // just a false positive.
+      if (is_number(option.string_key))
+      {
+        m_ignore_supplied.insert(option.string_key);
+      }
+
       m_supplied_options.insert(option.string_key);
 
       // If a std::string is later determined to be a value the erase it. This happens for negative numbers "-2"

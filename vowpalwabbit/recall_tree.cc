@@ -1,8 +1,6 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved. Released under a BSD (revised)
-license as described in the file LICENSE.node
-*/
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -526,7 +524,7 @@ base_learner* recall_tree_setup(options_i& options, vw& all)
 
   init_tree(*tree.get());
 
-  if (!all.quiet)
+  if (!all.logger.quiet)
     all.trace_message << "recall_tree:"
                       << " node_only = " << tree->node_only << " bern_hyper = " << tree->bern_hyper
                       << " max_depth = " << tree->max_depth << " routing = "

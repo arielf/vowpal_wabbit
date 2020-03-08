@@ -1,8 +1,6 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD (revised)
-license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 #include <cstdint>
 #include <algorithm>
 
@@ -66,7 +64,6 @@ void copy_example_metadata(bool /* audit */, example* dst, example* src)
   dst->test_only = src->test_only;
   dst->end_pass = src->end_pass;
   dst->sorted = src->sorted;
-  dst->in_use = src->in_use;
 }
 
 void copy_example_data(bool audit, example* dst, example* src)
@@ -174,7 +171,7 @@ flat_example* flatten_example(vw& all, example* ec)
     ffs.mask = (uint64_t)LONG_MAX >> all.weights.stride_shift();
   GD::foreach_feature<full_features_and_source, uint64_t, vec_ffs_store>(all, *ec, ffs);
 
-  fec.fs = ffs.fs;
+  std::swap(fec.fs, ffs.fs);
 
   return &fec;
 }
@@ -192,7 +189,7 @@ void free_flatten_example(flat_example* fec)
   // note: The label memory should be freed by by freeing the original example.
   if (fec)
   {
-    fec->fs.delete_v();
+    fec->fs.~features();
     if (fec->tag_len > 0)
       free(fec->tag);
     free(fec);
@@ -208,7 +205,6 @@ example* alloc_examples(size_t, size_t count = 1)
     return nullptr;
   for (size_t i = 0; i < count; i++)
   {
-    ec[i].in_use = true;
     ec[i].ft_offset = 0;
     //  std::cerr << "  alloc_example.indices.begin()=" << ec->indices.begin() << " end=" << ec->indices.end() << " //
     //  ld = " << ec->ld << "\t|| me = " << ec << std::endl;
@@ -228,13 +224,11 @@ void dealloc_example(void (*delete_label)(void*), example& ec, void (*delete_pre
 
   if (ec.passthrough)
   {
-    ec.passthrough->delete_v();
     delete ec.passthrough;
   }
 
-  for (auto & j : ec.feature_space) j.delete_v();
-
   ec.indices.delete_v();
+  ec.~example();
 }
 
 void finish_example(vw&, example&);
@@ -242,10 +236,8 @@ void clean_example(vw&, example&, bool rewind);
 
 void finish_example(vw& all, multi_ex& ec_seq)
 {
-  if (!ec_seq.empty())
-    for (example* ecc : ec_seq)
-      if (ecc->in_use)
-        VW::finish_example(all, *ecc);
+  for (example* ecc : ec_seq)
+    VW::finish_example(all, *ecc);
 }
 
 void return_multiple_example(vw& all, v_array<example*>& examples)

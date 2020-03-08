@@ -1,15 +1,20 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD
-license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #pragma once
-#ifndef _WIN32
-#include <sys/types.h>
+
+#ifdef _WIN32
+#define NOMINMAX
+#define ssize_t int64_t
+#include <io.h>
+#include <sys/stat.h>
+#else
 #include <unistd.h>
 #endif
 
 #include <cstdio>
+#include <cstdint>
 #include <fcntl.h>
 #include "v_array.h"
 #include <iostream>
@@ -22,13 +27,6 @@ license as described in the file LICENSE.
 
 #ifndef O_LARGEFILE  // for OSX
 #define O_LARGEFILE 0
-#endif
-
-#ifdef _WIN32
-#define NOMINMAX
-#define ssize_t int64_t
-#include <io.h>
-#include <sys/stat.h>
 #endif
 
 /* The i/o buffer can be conceptualized as an array below:
@@ -87,10 +85,7 @@ class io_buf
     return _hash;
   }
 
-  virtual int open_file(const char* name, bool stdin_off)
-  {
-    return open_file(name, stdin_off, READ);
-  }
+  virtual int open_file(const char* name, bool stdin_off) { return open_file(name, stdin_off, READ); }
 
   virtual int open_file(const char* name, bool stdin_off, int flag = READ)
   {
@@ -147,11 +142,7 @@ class io_buf
     head = space.begin();
   }
 
-  io_buf() :
-    _verify_hash{false},
-    _hash{0},
-    count{0},
-    current{0}
+  io_buf() : _verify_hash{false}, _hash{0}, count{0}, current{0}
   {
     space = v_init<char>();
     files = v_init<int>();

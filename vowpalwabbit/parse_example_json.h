@@ -1,8 +1,6 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD
-license as described in the file LICENSE.
-*/
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 
 #pragma once
 
@@ -32,8 +30,11 @@ license as described in the file LICENSE.
 
 #include "best_constant.h"
 
+#include "vw_string_view.h"
 #include <algorithm>
 #include <vector>
+#include <limits>
+#include <sstream>
 
 // portability fun
 #ifndef _WIN32
@@ -75,11 +76,22 @@ struct Namespace
 
   void AddFeature(vw* all, const char* str)
   {
-    ftrs->push_back(1., VW::hash_feature(*all, str, namespace_hash));
+    ftrs->push_back(1., VW::hash_feature_cstr(*all, const_cast<char*>(str), namespace_hash));
     feature_count++;
 
     if (audit)
       ftrs->space_names.push_back(audit_strings_ptr(new audit_strings(name, str)));
+  }
+
+  void AddFeature(vw* all, const char* key, const char* value)
+  {
+    ftrs->push_back(1., VW::hash_feature(*all, value, VW::hash_feature(*all, key, namespace_hash)));
+    feature_count++;
+
+    std::stringstream ss;
+    ss << key << "^" << value;
+    if (audit)
+      ftrs->space_names.push_back(audit_strings_ptr(new audit_strings(name, ss.str())));
   }
 };
 
@@ -198,6 +210,50 @@ class LabelObjectState : public BaseState<audit>
     return this;
   }
 
+  BaseState<audit>* String(Context<audit>& ctx, const char* str, rapidjson::SizeType /* len */, bool) override
+  {
+    if (_stricmp(str, "NaN") != 0)
+    {
+      ctx.error() << "Unsupported label property: '" << ctx.key << "' len: " << ctx.key_length << ". The only string value supported in this context is NaN.";
+      return nullptr;
+    }
+
+    // simple
+    if (!_stricmp(ctx.key, "Label"))
+    {
+      ctx.ex->l.simple.label = std::numeric_limits<float>::quiet_NaN();
+      found = true;
+    }
+    else if (!_stricmp(ctx.key, "Initial"))
+    {
+      ctx.ex->l.simple.initial = std::numeric_limits<float>::quiet_NaN();
+      found = true;
+    }
+    else if (!_stricmp(ctx.key, "Weight"))
+    {
+      ctx.ex->l.simple.weight = std::numeric_limits<float>::quiet_NaN();
+      found = true;
+    }
+    // CB
+    else if (!_stricmp(ctx.key, "Cost"))
+    {
+      cb_label.cost = std::numeric_limits<float>::quiet_NaN();
+      found_cb = true;
+    }
+    else if (!_stricmp(ctx.key, "Probability"))
+    {
+      cb_label.probability = std::numeric_limits<float>::quiet_NaN();
+      found_cb = true;
+    }
+    else
+    {
+      ctx.error() << "Unsupported label property: '" << ctx.key << "' len: " << ctx.key_length;
+      return nullptr;
+    }
+
+    return this;
+  }
+
   BaseState<audit>* Float(Context<audit>& ctx, float v) override
   {
     // simple
@@ -245,7 +301,7 @@ class LabelObjectState : public BaseState<audit>
 
   BaseState<audit>* EndObject(Context<audit>& ctx, rapidjson::SizeType) override
   {
-    if (ctx.all->label_type == label_type::ccb)
+    if (ctx.all->label_type == label_type_t::ccb)
     {
       auto ld = (CCB::label*)&ctx.ex->l;
 
@@ -308,6 +364,18 @@ struct LabelSinglePropertyState : BaseState<audit>
     ctx.key_length -= 7;
 
     if (ctx.label_object_state.Float(ctx, v) == nullptr)
+      return nullptr;
+
+    return ctx.previous_state;
+  }
+
+  BaseState<audit>* String(Context<audit>& ctx, const char* str, rapidjson::SizeType len, bool copy) override
+  {
+    // skip "_label_"
+    ctx.key += 7;
+    ctx.key_length -= 7;
+
+    if (ctx.label_object_state.String(ctx, str, len, copy) == nullptr)
       return nullptr;
 
     return ctx.previous_state;
@@ -433,7 +501,7 @@ struct MultiState : BaseState<audit>
   BaseState<audit>* StartArray(Context<audit>& ctx) override
   {
     // mark shared example
-    if (ctx.all->label_type == label_type::cb)
+    if (ctx.all->label_type == label_type_t::cb)
     {
       CB::label* ld = &ctx.ex->l.cb;
       CB::cb_class f;
@@ -445,7 +513,7 @@ struct MultiState : BaseState<audit>
 
       ld->costs.push_back(f);
     }
-    else if (ctx.all->label_type == label_type::ccb)
+    else if (ctx.all->label_type == label_type_t::ccb)
     {
       CCB::label* ld = &ctx.ex->l.conditional_contextual_bandit;
       ld->type = CCB::example_type::shared;
@@ -461,7 +529,7 @@ struct MultiState : BaseState<audit>
     // allocate new example
     ctx.ex = &(*ctx.example_factory)(ctx.example_factory_context);
     ctx.all->p->lp.default_label(&ctx.ex->l);
-    if (ctx.all->label_type == label_type::ccb)
+    if (ctx.all->label_type == label_type_t::ccb)
     {
       ctx.ex->l.conditional_contextual_bandit.type = CCB::example_type::action;
     }
@@ -773,10 +841,17 @@ class DefaultState : public BaseState<audit>
       }
     }
 
-    char* prepend = (char*)str - ctx.key_length;
-    memmove(prepend, ctx.key, ctx.key_length);
+    if (ctx.all->chain_hash)
+    {
+      ctx.CurrentNamespace().AddFeature(ctx.all, ctx.key, str);
+    }
+    else
+    {
+      char* prepend = (char*)str - ctx.key_length;
+      memmove(prepend, ctx.key, ctx.key_length);
 
-    ctx.CurrentNamespace().AddFeature(ctx.all, prepend);
+      ctx.CurrentNamespace().AddFeature(ctx.all, prepend);
+    }
 
     return this;
   }
@@ -826,7 +901,7 @@ class DefaultState : public BaseState<audit>
 
       // If we are in CCB mode and there have been no slots. Check label cost, prob and action were passed. In that
       // case this is CB, so generate a single slot with this info.
-      if (ctx.all->label_type == label_type::ccb)
+      if (ctx.all->label_type == label_type_t::ccb)
       {
         auto num_slots = std::count_if(ctx.examples->begin(), ctx.examples->end(),
             [](example* ex) { return ex->l.conditional_contextual_bandit.type == CCB::example_type::slot; });
@@ -853,7 +928,7 @@ class DefaultState : public BaseState<audit>
   BaseState<audit>* Float(Context<audit>& ctx, float f) override
   {
     auto& ns = ctx.CurrentNamespace();
-    ns.AddFeature(f, VW::hash_feature(*ctx.all, ctx.key, ns.namespace_hash), ctx.key);
+    ns.AddFeature(f, VW::hash_feature_cstr(*ctx.all, const_cast<char*>(ctx.key), ns.namespace_hash), ctx.key);
 
     return this;
   }
@@ -884,6 +959,26 @@ class ArrayToVectorState : public BaseState<audit>
     }
 
     has_seen_array_start = true;
+
+    return this;
+  }
+
+  BaseState<audit>* String(
+      Context<audit>& ctx, const char* str, rapidjson::SizeType /*length*/, bool /* copy */) override
+  {
+    if (_stricmp(str, "NaN") != 0)
+    {
+      ctx.error() << "The only supported string in the array is 'NaN'";
+      return nullptr;
+    }
+
+    output_array->push_back(std::numeric_limits<T>::quiet_NaN());
+
+    if (!has_seen_array_start)
+    {
+      has_seen_array_start = false;
+      return return_state;
+    }
 
     return this;
   }
@@ -1242,7 +1337,7 @@ struct Context
   {
     Namespace<audit> n;
     n.feature_group = ns[0];
-    n.namespace_hash = VW::hash_space(*all, ns);
+    n.namespace_hash = VW::hash_space_cstr(*all, ns);
     n.ftrs = ex->feature_space.data() + ns[0];
     n.feature_count = 0;
     n.return_state = return_state;
@@ -1373,12 +1468,17 @@ void read_line_json(
 
 inline void apply_pdrop(vw& all, float pdrop, v_array<example*>& examples)
 {
-  if (all.label_type == label_type::label_type_t::cb) {
-    for (auto& e: examples) {
+  if (all.label_type == label_type_t::cb)
+  {
+    for (auto& e : examples)
+    {
       e->l.cb.weight = 1 - pdrop;
     }
-  } else if (all.label_type == label_type::label_type_t::ccb) {
-    for (auto& e: examples) {
+  }
+  else if (all.label_type == label_type_t::ccb)
+  {
+    for (auto& e : examples)
+    {
       e->l.conditional_contextual_bandit.weight = 1 - pdrop;
     }
   }
@@ -1471,8 +1571,8 @@ inline void prepare_for_learner(vw* all, v_array<example*>& examples)
   if (examples.size() > 1)
   {
     example& ae = VW::get_unused_example(all);
-    char empty = '\0';
-    substring example = {&empty, &empty};
+    static const char empty[] = "";
+    VW::string_view example(empty);
     substring_to_example(all, &ae, example);
 
     examples.push_back(&ae);

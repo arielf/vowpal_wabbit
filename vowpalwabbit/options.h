@@ -1,3 +1,7 @@
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
+
 #pragma once
 
 #include <string>
@@ -6,10 +10,13 @@
 #include <typeinfo>
 #include <memory>
 
+#include "options_types.h"
+
 namespace VW
 {
 namespace config
 {
+
 struct base_option
 {
   base_option(std::string name, size_t type_hash) : m_name(std::move(name)), m_type_hash(type_hash) {}
@@ -19,6 +26,7 @@ struct base_option
   std::string m_help = "";
   std::string m_short_name = "";
   bool m_keep = false;
+  bool m_allow_override = false;
 
   virtual ~base_option() = default;
 };
@@ -55,6 +63,13 @@ struct typed_option : base_option
   typed_option& keep(bool keep = true)
   {
     m_keep = keep;
+    return *this;
+  }
+
+  typed_option& allow_override(bool allow_override = true)
+  {
+    static_assert(is_scalar_option_type<T>::value, "allow_override can only apply to scalar option types.");
+    m_allow_override = allow_override;
     return *this;
   }
 

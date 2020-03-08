@@ -1,8 +1,6 @@
-/*
-Copyright (c) by respective owners including Yahoo!, Microsoft, and
-individual contributors. All rights reserved.  Released under a BSD
-license as described in the file LICENSE.
- */
+// Copyright (c) by respective owners including Yahoo!, Microsoft, and
+// individual contributors. All rights reserved. Released under a BSD (revised)
+// license as described in the file LICENSE.
 
 #pragma once
 
@@ -22,7 +20,8 @@ license as described in the file LICENSE.
 #include "ccb_label.h"
 #include <vector>
 
-typedef union {
+typedef union
+{
   no_label::no_label empty;
   label_data simple;
   MULTICLASS::label_t multi;
@@ -39,7 +38,8 @@ inline void delete_scalars(void* v)
   preds->delete_v();
 }
 
-typedef union {
+typedef union
+{
   float scalar;
   v_array<float> scalars;           // a sequence of scalar predictions
   ACTION_SCORE::action_scores a_s;  // a sequence of classes with scores.  Also used for probabilities.
@@ -49,6 +49,7 @@ typedef union {
   float prob;  // for --probabilities --csoaa_ldf=mc
 } polyprediction;
 
+IGNORE_DEPRECATED_USAGE_START
 struct example : public example_predict  // core example datatype.
 {
   // input fields
@@ -74,8 +75,11 @@ struct example : public example_predict  // core example datatype.
   bool test_only;
   bool end_pass;  // special example indicating end of pass.
   bool sorted;    // Are the features sorted or not?
-  bool in_use;    // in use or not (for the parser)
+  
+  VW_DEPRECATED("in_use has been removed, examples taken from the pool are assumed to be in use if there is a reference to them. Standalone examples are by definition always in use.")
+  bool in_use = true;
 };
+IGNORE_DEPRECATED_USAGE_END
 
 struct vw;
 
